@@ -19,6 +19,8 @@ from lisatools.sensitivity import get_sensitivity
 
 from few.waveform import GenerateEMRIWaveform
 from eryn.utils import TransformContainer
+from few.utils.utility import omp_set_num_threads
+omp_set_num_threads(8)
 
 import matplotlib.pyplot as plt
 from few.utils.constants import *
@@ -28,22 +30,17 @@ np.random.seed(SEED)
 try:
     import cupy as xp
     # set GPU device
-    xp.cuda.runtime.setDevice(0)
+    xp.cuda.runtime.setDevice(7)
     gpu_available = True
+    use_gpu = True
 
 except (ImportError, ModuleNotFoundError) as e:
     import numpy as xp
     gpu_available = False
+    use_gpu = False
 
 import warnings
-
 warnings.filterwarnings("ignore")
-
-# whether you are using 
-use_gpu = True
-
-if use_gpu is True:
-    xp = np
 
 if use_gpu and not gpu_available:
     raise ValueError("Requesting gpu with no GPU available or cupy issue.")
@@ -82,6 +79,20 @@ class get_fd_waveform():
         fft_sig_c = -xp.imag(fd_sig + xp.flip(fd_sig) )/2.0 + 1j * xp.real(fd_sig - xp.flip(fd_sig))/2.0
         return [fft_sig_p, fft_sig_c]
 
+
+class get_fd_waveform_fromTD():
+
+    def __init__(self, waveform_generator, positive_frequency_mask, dt):
+        self.waveform_generator = waveform_generator
+        self.positive_frequency_mask = positive_frequency_mask
+        self.dt = dt
+
+    def __call__(self,*args, **kwargs):
+        data_channels_td = self.waveform_generator(*args, **kwargs)
+        fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(data_channels_td[0]))[self.positive_frequency_mask] * self.dt
+        fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(data_channels_td[1]))[self.positive_frequency_mask] * self.dt
+        return [fft_td_wave_p,fft_td_wave_c]
+
 # function call
 def run_emri_pe(
     emri_injection_params, 
@@ -90,7 +101,9 @@ def run_emri_pe(
     fp,
     ntemps,
     nwalkers,
-    emri_kwargs={}
+    injectFD=1,
+    template='fd',
+    emri_kwargs={},
 ):
 
     # sets the proper number of points and what not
@@ -148,8 +161,8 @@ def run_emri_pe(
             {
                 0: uniform_dist(np.log(5e5), np.log(5e6)),  # M
                 1: uniform_dist(1.0, 100.0),  # mu
-                2: uniform_dist(10.0, 16.0),  # p0
-                3: uniform_dist(0.001, 0.4),  # e0
+                2: uniform_dist(10.0, 15.0),  # p0
+                3: uniform_dist(0.001, 0.5),  # e0
                 4: uniform_dist(0.01, 100.0),  # dist in Gpc
                 5: uniform_dist(-0.99999, 0.99999),  # qS
                 6: uniform_dist(0.0, 2 * np.pi),  # phiS
@@ -191,16 +204,17 @@ def run_emri_pe(
     positive_frequency_mask = (frequency>=0.0)
     # define converions class
     fd_gen = get_fd_waveform(few_gen)
-
     # transform into hp and hc
     sig_fd = fd_gen.transform_FD(data_channels_fd)
 
     # generate TD waveform, this will return a list with hp and hc
     data_channels_td = td_gen(*injection_in, **emri_kwargs)
+    fft_td_gen = get_fd_waveform_fromTD(td_gen,positive_frequency_mask,dt)
     # fft from negative to positive frequencies
     fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(data_channels_td[1])) * dt
     fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(data_channels_td[0])) * dt
     sig_td = [fft_td_wave_p,fft_td_wave_c]
+    # sig_td = fft_td_gen(*injection_in, **emri_kwargs)
 
     # kwargs for computing inner products
     fd_inner_product_kwargs = dict( PSD="cornish_lisa_psd", use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
@@ -213,23 +227,34 @@ def run_emri_pe(
     )
 
     check_snr = snr(sig_fd, **fd_inner_product_kwargs)
+    print("SNR = ", check_snr)
 
     # this is a parent likelihood class that manages the parameter transforms
     nchannels = 2
+    if template=='fd':
+        like_gen = fd_gen
+    elif template=='td':
+        like_gen = fft_td_gen
+
     like = Likelihood(
-        fd_gen,
+        like_gen,
         nchannels,  # channels (plus,cross)
         parameter_transforms={"emri": transform_fn},
         vectorized=False,
         transpose_params=False,
-        subset=4,  # may need this subset
+        subset=1,  # may need this subset
         f_arr = frequency[positive_frequency_mask].get(),
         use_gpu=use_gpu
     )
     
     # inject a signal
+    if bool(injectFD):
+        data_stream = sig_fd
+    else:
+        data_stream = sig_td
+    
     like.inject_signal(
-        data_stream=sig_fd,
+        data_stream=data_stream,
         # params= injection_params.copy()[test_inds],
         waveform_kwargs=waveform_kwargs,
         noise_fn=get_sensitivity,
@@ -241,14 +266,14 @@ def run_emri_pe(
 
     # generate starting points
     factor = 1e-5
-    cov = np.ones(ndim) * 1e-3
+    cov = np.ones(ndim) * 1e-4
     cov[0] = 1e-5
 
     start_like = np.zeros((nwalkers * ntemps))
     
     iter_check = 0
     max_iter = 1000
-    while np.std(start_like) < 10.0:
+    while np.std(start_like) < 1.0:
         
         logp = np.full_like(start_like, -np.inf)
         tmp = np.zeros((ntemps * nwalkers, ndim))
@@ -276,6 +301,7 @@ def run_emri_pe(
         factor *= 1.5
 
         print("std in likelihood",np.std(start_like))
+        print("likelihood",start_like)
 
         if iter_check > max_iter:
             raise ValueError("Unable to find starting parameters.")
@@ -310,12 +336,13 @@ def run_emri_pe(
         #update_fn=None,
         #update_iterations=-1,
         branch_names=["emri"],
+        info={"truth":emri_injection_params_in}
 
     )
 
     # TODO: check about using injection as reference when the glitch is added
     # may need to add the heterodyning updater
-    nsteps = 2000
+    nsteps = 10000
     out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
 
     # get samples
@@ -345,7 +372,9 @@ if __name__ == "__main__":
 
     Tobs = 2.05
     dt = 15.0
-    fp = f"search_run_wnoise_priordraw_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_seed{SEED}.h5"
+    eps = 1e-5
+    injectFD = 0
+    fp = f"emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_injectFD{injectFD}.h5"
 
     emri_injection_params = np.array([
         M,  
@@ -364,13 +393,13 @@ if __name__ == "__main__":
         Phi_r0
     ])
 
-    ntemps = 4
-    nwalkers = 30
+    ntemps = 2
+    nwalkers = 32
 
     waveform_kwargs = {
-        "T": 1.0,
-        "dt": 15.0,
-        "eps": 1e-2
+        "T": Tobs,
+        "dt": dt,
+        "eps": eps
     }
 
     run_emri_pe(
