@@ -18,10 +18,14 @@ from lisatools.diagnostic import *
 from lisatools.sensitivity import get_sensitivity
 
 from few.waveform import GenerateEMRIWaveform
+from few.utils.utility import get_p_at_t
+from few.trajectory.inspiral import EMRIInspiral
+
 from eryn.utils import TransformContainer
 from few.utils.utility import omp_set_num_threads
-omp_set_num_threads(8)
+omp_set_num_threads(4)
 
+import time
 import matplotlib.pyplot as plt
 from few.utils.constants import *
 SEED=2601996
@@ -55,6 +59,14 @@ few_gen = GenerateEMRIWaveform(
 td_gen = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
     sum_kwargs=dict(pad_output=True),
+    use_gpu=use_gpu,
+    return_list=True
+)
+
+
+few_gen_list = GenerateEMRIWaveform(
+    "FastSchwarzschildEccentricFlux", 
+    sum_kwargs=dict(pad_output=True, output_type="fd"),
     use_gpu=use_gpu,
     return_list=True
 )
@@ -141,6 +153,7 @@ def run_emri_pe(
 
     # get the right parameters
     # log of large mass
+    emri_injection_params[1] = np.log(emri_injection_params[1]/emri_injection_params[0])
     emri_injection_params[0] = np.log(emri_injection_params[0])
     emri_injection_params[7] = np.cos(emri_injection_params[7]) 
     emri_injection_params[8] = emri_injection_params[8] % (2 * np.pi)
@@ -160,7 +173,7 @@ def run_emri_pe(
         "emri": ProbDistContainer(
             {
                 0: uniform_dist(np.log(5e5), np.log(5e6)),  # M
-                1: uniform_dist(1.0, 100.0),  # mu
+                1: uniform_dist(np.log(1e-6), np.log(1e-4)),  # mass ratio
                 2: uniform_dist(10.0, 15.0),  # p0
                 3: uniform_dist(0.001, 0.5),  # e0
                 4: uniform_dist(0.01, 100.0),  # dist in Gpc
@@ -179,11 +192,14 @@ def run_emri_pe(
         "emri": {6: 2 * np.pi, 8: np.pi, 9: 2 * np.pi, 10: 2 * np.pi}
     }
 
+    def transform_mass_ratio(logM, logeta):
+        return [np.exp(logM),  np.exp(logM) * np.exp(logeta)]
+
     # transforms from pe to waveform generation
     # after the fill happens (this is a little confusing)
     # on my list of things to improve
     parameter_transforms = {
-        0: np.exp,  # M 
+        (0,1): transform_mass_ratio,
         7: np.arccos, # qS
         9: np.arccos,  # qK
     }
@@ -191,7 +207,6 @@ def run_emri_pe(
     transform_fn = TransformContainer(
         parameter_transforms=parameter_transforms,
         fill_dict=fill_dict,
-
     )
 
     # get injected parameters after transformation
@@ -199,6 +214,11 @@ def run_emri_pe(
 
     # generate FD waveforms
     data_channels_fd = few_gen(*injection_in, **emri_kwargs)
+    tic = time.perf_counter()
+    [few_gen(*injection_in, **emri_kwargs) for _ in range(10)]
+    toc = time.perf_counter()
+    fd_time = toc-tic
+    print('fd time', fd_time/10)
     # frequency goes from -1/dt/2 up to 1/dt/2
     frequency = few_gen.waveform_generator.create_waveform.frequency
     positive_frequency_mask = (frequency>=0.0)
@@ -206,9 +226,15 @@ def run_emri_pe(
     fd_gen = get_fd_waveform(few_gen)
     # transform into hp and hc
     sig_fd = fd_gen.transform_FD(data_channels_fd)
+    
 
     # generate TD waveform, this will return a list with hp and hc
     data_channels_td = td_gen(*injection_in, **emri_kwargs)
+    tic = time.perf_counter()
+    [td_gen(*injection_in, **emri_kwargs) for _ in range(10)]
+    toc = time.perf_counter()
+    fd_time = toc-tic
+    print('td time', fd_time/10)
     fft_td_gen = get_fd_waveform_fromTD(td_gen,positive_frequency_mask,dt)
     # fft from negative to positive frequencies
     fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(data_channels_td[1])) * dt
@@ -218,14 +244,15 @@ def run_emri_pe(
 
     # kwargs for computing inner products
     fd_inner_product_kwargs = dict( PSD="cornish_lisa_psd", use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
-    sig_fd = [sig_fd[0][positive_frequency_mask],sig_fd[1][positive_frequency_mask]]
+    sig_fd = few_gen_list(*injection_in, **emri_kwargs)#[sig_fd[0][positive_frequency_mask],sig_fd[1][positive_frequency_mask]]
     sig_td = [sig_td[0][positive_frequency_mask],sig_td[1][positive_frequency_mask]]
 
     print("Overlap total and partial ", inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs),
     inner_product(sig_fd[0], sig_td[0], normalize=True, **fd_inner_product_kwargs),
     inner_product(sig_fd[1], sig_td[1], normalize=True, **fd_inner_product_kwargs)
     )
-
+    print("frequency len",len(frequency), " make sure that it is odd")
+    print("last point in TD", data_channels_td[0][-1])
     check_snr = snr(sig_fd, **fd_inner_product_kwargs)
     print("SNR = ", check_snr)
 
@@ -371,10 +398,28 @@ if __name__ == "__main__":
     Phi_r0 = 3.0
 
     Tobs = 2.05
-    dt = 15.0
+    dt = 0.25 # 4 Hz is the baseline 
     eps = 1e-5
-    injectFD = 0
-    fp = f"emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_injectFD{injectFD}.h5"
+    injectFD = 1
+    template = 'td'
+
+    traj = EMRIInspiral(func="SchwarzEccFlux")
+
+    p0 = get_p_at_t(
+    traj,
+    Tobs,
+    [M, mu, 0.0, e0, 1.0],
+    index_of_p=3,
+    index_of_a=2,
+    index_of_e=4,
+    index_of_x=5,
+    traj_kwargs={},
+    xtol=2e-12,
+    rtol=8.881784197001252e-16,
+    bounds=None,
+    )
+
+    fp = f"emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_injectFD{injectFD}_template" + template + ".h5"
 
     emri_injection_params = np.array([
         M,  
@@ -409,5 +454,6 @@ if __name__ == "__main__":
         fp,
         ntemps,
         nwalkers,
-        emri_kwargs=waveform_kwargs
+        emri_kwargs=waveform_kwargs,
+        template=template
     )

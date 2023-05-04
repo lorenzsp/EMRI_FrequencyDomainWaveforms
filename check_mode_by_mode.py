@@ -18,7 +18,7 @@ from lisatools.diagnostic import *
 from lisatools.sensitivity import get_sensitivity
 
 from few.waveform import GenerateEMRIWaveform
-from few.utils.utility import get_mu_at_t
+from few.utils.utility import get_mu_at_t, get_p_at_t
 from eryn.utils import TransformContainer
 import time
 from few.utils.utility import omp_set_num_threads
@@ -51,21 +51,22 @@ if use_gpu and not gpu_available:
 
 few_gen = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
-    sum_kwargs=dict(pad_output=True, output_type="fd"),
+    sum_kwargs=dict(pad_output=True, output_type="fd", odd_len=True),
     use_gpu=use_gpu,
-    return_list=False
+    return_list=False,
+    
 )
 
 few_gen_list = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
-    sum_kwargs=dict(pad_output=True, output_type="fd"),
+    sum_kwargs=dict(pad_output=True, output_type="fd", odd_len=True),
     use_gpu=use_gpu,
     return_list=True
 )
 
 td_gen = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
-    sum_kwargs=dict(pad_output=True),
+    sum_kwargs=dict(pad_output=True, odd_len=True),
     use_gpu=use_gpu,
     return_list=True
 )
@@ -179,7 +180,7 @@ def run_check(
     timing_td = []
     timing_fd = []
     loglike = []
-    tot_numb = 500
+    tot_numb = 100
     for el in range(tot_numb):
         print( el/tot_numb,'---------------------')
         tmp = priors["emri"].rvs()
@@ -188,26 +189,15 @@ def run_check(
 
         # set initial parameters
         M = injection_in[0]
+        mu = injection_in[1]
         p0 = injection_in[3]
         e0 = injection_in[4]
-
-        traj_args = [M, 0.0, p0, e0, 1.0]
-        traj_kwargs = {}
-        index_of_mu = 1
 
         t_out = Tobs*1.001
         try:
             # run trajectory to get one year inspiral
-            # injection_in[1] = get_mu_at_t(
-            #     traj_module,
-            #     t_out,
-            #     traj_args,
-            #     index_of_mu=index_of_mu,
-            #     traj_kwargs=traj_kwargs,
-            #     xtol=2e-12,
-            #     rtol=8.881784197001252e-16,
-            #     # bounds=[6+2*e0+0.2, 16.0],
-            # )
+            p0 = get_p_at_t(traj_module,t_out,[M, mu, 0.0, e0, 1.0],index_of_p=3,index_of_a=2,index_of_e=4,index_of_x=5,traj_kwargs={},xtol=2e-6,rtol=8.881784197001252e-6,bounds=[6 + 2*e0+0.1, 40.0],)
+            injection_in[3] = p0
 
             tic = time.perf_counter()
             # generate FD waveforms
@@ -237,7 +227,7 @@ def run_check(
             timing_td.append(td_time)
             timing_fd.append(fd_time)
 
-            # print("TD/FD time",td_time/fd_time, "TD", td_time, "FD", fd_time )
+            print("TD/FD time",td_time/fd_time, "TD", td_time, "FD", fd_time )
             
             if el>0:
                 factor.append(td_time/fd_time)
@@ -299,9 +289,9 @@ def run_check(
 
 if __name__ == "__main__":
     omp_set_num_threads(8)
-    Tobs = 2.05
-    dt = 10.0
-    eps = 1e-5
+    Tobs = 1.05
+    dt = 0.5
+    eps = 1e-2
 
     ntemps = 4
     nwalkers = 30
