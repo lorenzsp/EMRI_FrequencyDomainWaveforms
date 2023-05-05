@@ -239,10 +239,17 @@ def run_check(
             # mismatch
             Mism = np.abs(1-inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs))
             print("mismatch total and partial ", Mism)
-            mismatch.append(Mism.get())
+            if use_gpu:
+                mismatch.append(Mism.get())
+            else:
+                mismatch.append(Mism)
+            
             # loglike
             sig_inner = [sig_fd[0]-sig_td[0],sig_fd[1]-sig_td[1]]
-            logl = -0.5 * inner_product(sig_inner, sig_inner, normalize=False, **fd_inner_product_kwargs).get()
+            if use_gpu:
+                logl = -0.5 * inner_product(sig_inner, sig_inner, normalize=False, **fd_inner_product_kwargs).get()
+            else:
+                logl = -0.5 * inner_product(sig_inner, sig_inner, normalize=False, **fd_inner_product_kwargs)
             print("logl ", logl)
             loglike.append(logl)
 

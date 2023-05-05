@@ -51,14 +51,14 @@ if use_gpu and not gpu_available:
 
 few_gen = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
-    sum_kwargs=dict(pad_output=True, output_type="fd"),
+    sum_kwargs=dict(pad_output=True, output_type="fd", odd_len=True),
     use_gpu=use_gpu,
     return_list=False
 )
 
 td_gen = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
-    sum_kwargs=dict(pad_output=True),
+    sum_kwargs=dict(pad_output=True, odd_len=True),
     use_gpu=use_gpu,
     return_list=True
 )
@@ -66,7 +66,7 @@ td_gen = GenerateEMRIWaveform(
 
 few_gen_list = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
-    sum_kwargs=dict(pad_output=True, output_type="fd"),
+    sum_kwargs=dict(pad_output=True, output_type="fd", odd_len=True),
     use_gpu=use_gpu,
     return_list=True
 )
@@ -174,7 +174,7 @@ def run_emri_pe(
             {
                 0: uniform_dist(np.log(5e5), np.log(5e6)),  # M
                 1: uniform_dist(np.log(1e-6), np.log(1e-4)),  # mass ratio
-                2: uniform_dist(10.0, 15.0),  # p0
+                2: uniform_dist(8.0, 15.0),  # p0
                 3: uniform_dist(0.001, 0.5),  # e0
                 4: uniform_dist(0.01, 100.0),  # dist in Gpc
                 5: uniform_dist(-0.99999, 0.99999),  # qS
@@ -269,7 +269,7 @@ def run_emri_pe(
         parameter_transforms={"emri": transform_fn},
         vectorized=False,
         transpose_params=False,
-        subset=1,  # may need this subset
+        subset=4,  # may need this subset
         f_arr = frequency[positive_frequency_mask].get(),
         use_gpu=use_gpu
     )
@@ -293,48 +293,43 @@ def run_emri_pe(
 
     # generate starting points
     factor = 1e-5
-    cov = np.ones(ndim) * 1e-4
-    cov[0] = 1e-5
+    cov = np.eye(ndim) * 1e-12
 
-    start_like = np.zeros((nwalkers * ntemps))
+    # start_like = np.zeros((nwalkers * ntemps))
     
-    iter_check = 0
-    max_iter = 1000
-    while np.std(start_like) < 1.0:
+    # iter_check = 0
+    # max_iter = 1000
+    # while (np.std(start_like) < 1.0):
         
-        logp = np.full_like(start_like, -np.inf)
-        tmp = np.zeros((ntemps * nwalkers, ndim))
-        fix = np.ones((ntemps * nwalkers), dtype=bool)
-        while np.any(fix):
-            tmp[fix] = (emri_injection_params_in[None, :] * (1. + factor * cov * np.random.randn(nwalkers * ntemps, ndim)))[fix]
-
-            emri_injection_params_in[5] = emri_injection_params_in[5] % (2 * np.pi)
-            emri_injection_params_in[7] = emri_injection_params_in[7] % (2 * np.pi)
-
-            # phases
-            emri_injection_params_in[-1] = emri_injection_params_in[-1] % (2 * np.pi)
-            emri_injection_params_in[-2] = emri_injection_params_in[-2] % (2 * np.pi)
+    #     logp = np.full_like(start_like, -np.inf)
+    #     tmp = np.zeros((ntemps * nwalkers, ndim))
+    #     fix = np.ones((ntemps * nwalkers), dtype=bool)
+    #     while np.any(fix):
+    #         tmp[fix] = 
             
-            logp = priors["emri"].logpdf(tmp)
+    #         logp = priors["emri"].logpdf(tmp)
 
-            fix = np.isinf(logp)
-            if np.all(fix):
-                breakpoint()
+    #         fix = np.isinf(logp)
+    #         if np.all(fix):
+    #             breakpoint()
 
-        # like.injection_channels[:] = 0.0
-        start_like = like(tmp, **emri_kwargs)
+    #     # like.injection_channels[:] = 0.0
+    #     start_like = like(tmp, **emri_kwargs)
     
-        iter_check += 1
-        factor *= 1.5
+    #     iter_check += 1
+    #     factor *= 1.5
 
-        print("std in likelihood",np.std(start_like))
-        print("likelihood",start_like)
+    #     print("std in likelihood",np.std(start_like))
+    #     print("likelihood",start_like)
 
-        if iter_check > max_iter:
-            raise ValueError("Unable to find starting parameters.")
+    #     if iter_check > max_iter:
+    #         raise ValueError("Unable to find starting parameters.")
 
-    start_params = tmp.copy()
+    start_params = np.random.multivariate_normal(emri_injection_params_in, cov, size=nwalkers * ntemps)
     start_prior = priors["emri"].logpdf(start_params)
+    start_like = like(start_params, **emri_kwargs)
+    start_params[np.isnan(start_like)] = np.random.multivariate_normal(emri_injection_params_in, cov, size=start_params[np.isnan(start_like)].size)
+    print("likelihood",start_like)
 
     # start state
     start_state = State(
@@ -345,7 +340,7 @@ def run_emri_pe(
 
     # MCMC moves (move, percentage of draws)
     moves = [
-        StretchMove(use_gpu=use_gpu)
+        StretchMove(use_gpu=use_gpu, live_dangerously=True)
     ]
 
     # prepare sampler
@@ -367,9 +362,7 @@ def run_emri_pe(
 
     )
 
-    # TODO: check about using injection as reference when the glitch is added
-    # may need to add the heterodyning updater
-    nsteps = 10000
+    nsteps = 50000
     out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
 
     # get samples
@@ -384,24 +377,24 @@ if __name__ == "__main__":
     # set parameters
     M = 1e6
     a = 0.1  # will be ignored in Schwarzschild waveform
-    mu = 20.0
+    mu = 10.0
     p0 = 12.0
     e0 = 0.35
     x0 = 1.0  # will be ignored in Schwarzschild waveform
-    qK = 0.2  # polar spin angle
-    phiK = 0.2  # azimuthal viewing angle
-    qS = 0.3  # polar sky angle
-    phiS = 0.3  # azimuthal viewing angle
+    qK = np.pi/3  # polar spin angle
+    phiK = np.pi/4  # azimuthal viewing angle
+    qS = np.pi/3  # polar sky angle
+    phiS = np.pi/4  # azimuthal viewing angle
     dist = 3.0  # distance
     Phi_phi0 = 1.0
     Phi_theta0 = 2.0
     Phi_r0 = 3.0
 
-    Tobs = 2.05
-    dt = 0.25 # 4 Hz is the baseline 
+    Tobs = 1.00
+    dt = 1.0 # 4 Hz is the baseline 
     eps = 1e-5
     injectFD = 1
-    template = 'td'
+    template = 'fd'
 
     traj = EMRIInspiral(func="SchwarzEccFlux")
 
@@ -418,6 +411,7 @@ if __name__ == "__main__":
     rtol=8.881784197001252e-16,
     bounds=None,
     )
+    print("new p0 ", p0)
 
     fp = f"emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_injectFD{injectFD}_template" + template + ".h5"
 
@@ -439,7 +433,7 @@ if __name__ == "__main__":
     ])
 
     ntemps = 2
-    nwalkers = 32
+    nwalkers = 8
 
     waveform_kwargs = {
         "T": Tobs,
