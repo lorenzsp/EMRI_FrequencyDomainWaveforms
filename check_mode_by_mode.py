@@ -33,7 +33,7 @@ np.random.seed(SEED)
 try:
     import cupy as xp
     # set GPU device
-    xp.cuda.runtime.setDevice(7)
+    xp.cuda.runtime.setDevice(6)
     gpu_available = True
     use_gpu = True
 
@@ -180,7 +180,9 @@ def run_check(
     timing_td = []
     timing_fd = []
     loglike = []
-    tot_numb = 100
+    
+    tot_numb = 1000
+    
     for el in range(tot_numb):
         print( el/tot_numb,'---------------------')
         tmp = priors["emri"].rvs()
@@ -201,7 +203,6 @@ def run_check(
 
             tic = time.perf_counter()
             # generate FD waveforms
-            list_injections.append(injection_in)
             data_channels_fd = few_gen(*injection_in, **emri_kwargs)
             # frequency goes from -1/dt/2 up to 1/dt/2
             frequency = few_gen.waveform_generator.create_waveform.frequency
@@ -226,6 +227,7 @@ def run_check(
             # store timing
             timing_td.append(td_time)
             timing_fd.append(fd_time)
+            list_injections.append(injection_in)
 
             print("TD/FD time",td_time/fd_time, "TD", td_time, "FD", fd_time )
             
@@ -297,7 +299,7 @@ def run_check(
 if __name__ == "__main__":
     omp_set_num_threads(8)
     Tobs = 1.05
-    dt = 0.5
+    dt = 2.0
     eps = 1e-2
 
     ntemps = 4

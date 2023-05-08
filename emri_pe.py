@@ -34,7 +34,7 @@ np.random.seed(SEED)
 try:
     import cupy as xp
     # set GPU device
-    xp.cuda.runtime.setDevice(7)
+    xp.cuda.runtime.setDevice(6)
     gpu_available = True
     use_gpu = True
 
@@ -343,6 +343,19 @@ def run_emri_pe(
         StretchMove(use_gpu=use_gpu, live_dangerously=True)
     ]
 
+    from eryn.backends import HDFBackend
+
+    try:
+        file_samp  = HDFBackend(fp)
+        last_state = file_samp.get_last_sample()
+        inds = last_state.branches_inds.copy()
+        new_coords = last_state.branches_coords.copy()
+        coords = new_coords.copy()
+        resume = True
+    except:
+        resume = False
+        print('file not found')
+
     # prepare sampler
     sampler = EnsembleSampler(
         nwalkers,
@@ -362,7 +375,13 @@ def run_emri_pe(
 
     )
 
-    nsteps = 50000
+    if resume:
+        log_prior = sampler.compute_log_prior(coords, inds=inds)
+        log_like = sampler.compute_log_like(coords, inds=inds, logp=log_prior)[0]
+        print("initial loglike",log_like)
+        start_state = State(coords, log_like=log_like, log_prior=log_prior, inds=inds)
+
+    nsteps = 100000
     out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
 
     # get samples
@@ -393,7 +412,7 @@ if __name__ == "__main__":
     Tobs = 1.00
     dt = 1.0 # 4 Hz is the baseline 
     eps = 1e-5
-    injectFD = 1
+    injectFD = 0
     template = 'fd'
 
     traj = EMRIInspiral(func="SchwarzEccFlux")
@@ -433,7 +452,7 @@ if __name__ == "__main__":
     ])
 
     ntemps = 2
-    nwalkers = 8
+    nwalkers = 32
 
     waveform_kwargs = {
         "T": Tobs,
