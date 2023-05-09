@@ -41,7 +41,7 @@ from few.trajectory.inspiral import EMRIInspiral
 
 from eryn.utils import TransformContainer
 from few.utils.utility import omp_set_num_threads
-omp_set_num_threads(4)
+omp_set_num_threads(8)
 
 import time
 import matplotlib.pyplot as plt
@@ -290,22 +290,21 @@ def run_emri_pe(
     
     if downsample:
         lst_ind = list(range(len(frequency)))
-        for ii in range(10,500):
-            check = 1==np.sum(frequency[lst_ind[0::ii]]==0.0)
-            if check:
-                print('--------------------------')
-                print('skip every ',ii, 'th element')
-                print('make sure there is the zero frequency ', check )
-                print('number of frequencies', len(frequency[lst_ind[0::ii]]))
-                print('percentage of frequencies', len(frequency[lst_ind[0::ii]])/len(frequency))
-                emri_kwargs['f_arr'] = frequency[lst_ind[0::ii]]
-                if use_gpu:
-                    f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0].get()
-                else:
-                    f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0]
-                data_stream = [el[0::ii] for el in data_stream]
-                break
-                
+        # make sure there is the zero frequency
+        check_vec = np.asarray([1==np.sum(frequency[lst_ind[0::ii]]==0.0) for ii in range(10,500)])
+
+        ii = np.arange(10,500)[check_vec][-1]
+        print('--------------------------')
+        print('skip every ',ii, 'th element')
+        print('number of frequencies', len(frequency[lst_ind[0::ii]]))
+        print('percentage of frequencies', len(frequency[lst_ind[0::ii]])/len(frequency))
+        emri_kwargs['f_arr'] = frequency[lst_ind[0::ii]]
+        if use_gpu:
+            f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0].get()
+        else:
+            f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0]
+        data_stream = [el[0::ii] for el in data_stream]
+
     else:
         if use_gpu:
             f_arr = frequency[positive_frequency_mask].get()
