@@ -134,6 +134,7 @@ def run_emri_pe(
     injectFD=1,
     template='fd',
     emri_kwargs={},
+    downsample = False,
 ):
 
     # sets the proper number of points and what not
@@ -245,7 +246,6 @@ def run_emri_pe(
     # transform into hp and hc
     sig_fd = fd_gen.transform_FD(data_channels_fd)
     
-
     # generate TD waveform, this will return a list with hp and hc
     data_channels_td = td_gen(*injection_in, **emri_kwargs)
     tic = time.perf_counter()
@@ -280,6 +280,37 @@ def run_emri_pe(
         like_gen = fd_gen
     elif template=='td':
         like_gen = fft_td_gen
+    
+    # inject a signal
+    if bool(injectFD):
+        data_stream = sig_fd
+    else:
+        data_stream = sig_td
+
+    
+    if downsample:
+        lst_ind = list(range(len(frequency)))
+        for ii in range(10,500):
+            check = 1==np.sum(frequency[lst_ind[0::ii]]==0.0)
+            if check:
+                print('--------------------------')
+                print('skip every ',ii, 'th element')
+                print('makse sure there is the zero frequency ', check )
+                print('number of frequencies', len(frequency[lst_ind[0::ii]]))
+                print('percentage of frequencies', len(frequency[lst_ind[0::ii]])/len(frequency))
+                emri_kwargs['f_arr'] = frequency[lst_ind[0::ii]]
+                if use_gpu:
+                    f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0].get()
+                else:
+                    f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0].get()
+                data_stream = [el[0::ii] for el in data_stream]
+                break
+                
+    else:
+        if use_gpu:
+            f_arr = frequency[positive_frequency_mask].get()
+        else:
+            f_arr = frequency[positive_frequency_mask]
 
     like = Likelihood(
         like_gen,
@@ -288,16 +319,10 @@ def run_emri_pe(
         vectorized=False,
         transpose_params=False,
         subset=4,  # may need this subset
-        f_arr = frequency[positive_frequency_mask].get(),
+        f_arr = f_arr,
         use_gpu=use_gpu
     )
-    
-    # inject a signal
-    if bool(injectFD):
-        data_stream = sig_fd
-    else:
-        data_stream = sig_td
-    
+
     like.inject_signal(
         data_stream=data_stream,
         # params= injection_params.copy()[test_inds],
@@ -453,7 +478,8 @@ if __name__ == "__main__":
     )
     print("new p0 ", p0)
 
-    fp = f"emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_injectFD{injectFD}_template" + template + ".h5"
+    downsample = False
+    fp = f"emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + ".h5"
 
     emri_injection_params = np.array([
         M,  
@@ -487,5 +513,6 @@ if __name__ == "__main__":
         ntemps,
         nwalkers,
         emri_kwargs=waveform_kwargs,
-        template=template
+        template=template,
+        downsample=downsample
     )
