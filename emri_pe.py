@@ -295,7 +295,7 @@ def run_emri_pe(
             if check:
                 print('--------------------------')
                 print('skip every ',ii, 'th element')
-                print('makse sure there is the zero frequency ', check )
+                print('make sure there is the zero frequency ', check )
                 print('number of frequencies', len(frequency[lst_ind[0::ii]]))
                 print('percentage of frequencies', len(frequency[lst_ind[0::ii]])/len(frequency))
                 emri_kwargs['f_arr'] = frequency[lst_ind[0::ii]]
@@ -336,7 +336,8 @@ def run_emri_pe(
 
     # generate starting points
     factor = 1e-5
-    cov = np.eye(ndim) * 1e-12
+    
+    cov = np.load("covariance.npy") / (2.4 * ndim) #np.eye(ndim) * 1e-12
 
     # start_like = np.zeros((nwalkers * ntemps))
     
