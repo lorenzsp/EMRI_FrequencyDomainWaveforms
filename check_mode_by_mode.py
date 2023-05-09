@@ -299,8 +299,8 @@ def run_check(
 if __name__ == "__main__":
     omp_set_num_threads(8)
     Tobs = 1.05
-    dt = 2.0
-    eps = 1e-2
+    dt = 5.0
+    eps = 1e-5
 
     ntemps = 4
     nwalkers = 30

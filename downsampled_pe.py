@@ -49,17 +49,17 @@ from few.utils.constants import *
 SEED=2601996
 np.random.seed(SEED)
 
-try:
-    import cupy as xp
-    # set GPU device
-    xp.cuda.runtime.setDevice(args['dev'])
-    gpu_available = True
-    use_gpu = True
+# try:
+#     import cupy as xp
+#     # set GPU device
+#     xp.cuda.runtime.setDevice(args['dev'])
+#     gpu_available = True
+#     use_gpu = True
 
-except (ImportError, ModuleNotFoundError) as e:
-    import numpy as xp
-    gpu_available = False
-    use_gpu = False
+# except (ImportError, ModuleNotFoundError) as e:
+import numpy as xp
+gpu_available = False
+use_gpu = False
 
 import warnings
 warnings.filterwarnings("ignore")
