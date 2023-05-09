@@ -302,7 +302,7 @@ def run_emri_pe(
                 if use_gpu:
                     f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0].get()
                 else:
-                    f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0].get()
+                    f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0]
                 data_stream = [el[0::ii] for el in data_stream]
                 break
                 
