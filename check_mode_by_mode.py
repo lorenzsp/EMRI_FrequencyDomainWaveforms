@@ -1,4 +1,12 @@
-# nohup python emri_pe.py > out.out &
+import argparse
+# python check_mode_by_mode.py -Tobs 1.0 -dev 5 -eps 1e-3 -dt 10.0
+parser = argparse.ArgumentParser(description='MCMC few')
+parser.add_argument('-Tobs','--Tobs', help='Observation Time in years', required=True, type=float)
+parser.add_argument('-dev','--dev', help='Cuda Device', required=True, type=int)
+parser.add_argument('-eps','--eps', help='eps mode selection', required=True, type=float)
+parser.add_argument('-dt','--dt', help='delta t', required=False, type=float)
+
+args = vars(parser.parse_args())
 
 import sys
 sys.path.append("../LISAanalysistools/")
@@ -33,7 +41,7 @@ np.random.seed(SEED)
 try:
     import cupy as xp
     # set GPU device
-    xp.cuda.runtime.setDevice(6)
+    xp.cuda.runtime.setDevice(args['dev'])
     gpu_available = True
     use_gpu = True
 
@@ -110,11 +118,11 @@ def run_check(
     Tobs,
     dt,
     fp,
-    ntemps,
-    nwalkers,
     injectFD=1,
     template='fd',
     emri_kwargs={},
+    random_modes=False,
+    get_fixed_inspiral=True,
 ):
 
     # for transforms
@@ -181,10 +189,23 @@ def run_check(
     timing_fd = []
     loglike = []
     
-    tot_numb = 1000
+    tot_numb = 50
     
     for el in range(tot_numb):
+        
         print( el/tot_numb,'---------------------')
+        if random_modes:
+            try:
+                del emri_kwargs['eps']
+            except:
+                pass
+            ll = np.random.randint(2,10)
+            mm = np.random.randint(-ll,ll+1)
+            nn = np.random.randint(-30,30)
+            print(ll, mm, nn)
+            emri_kwargs['mode_selection'] = [(ll, mm, nn)]
+
+        # randomly draw parameters
         tmp = priors["emri"].rvs()
         # get injected parameters after transformation
         injection_in = transform_fn.both_transforms(tmp)[0]
@@ -195,11 +216,14 @@ def run_check(
         p0 = injection_in[3]
         e0 = injection_in[4]
 
+        # get p in order to get an inspiral of 
         t_out = Tobs*1.001
         try:
-            # run trajectory to get one year inspiral
-            p0 = get_p_at_t(traj_module,t_out,[M, mu, 0.0, e0, 1.0],index_of_p=3,index_of_a=2,index_of_e=4,index_of_x=5,traj_kwargs={},xtol=2e-6,rtol=8.881784197001252e-6,bounds=[6 + 2*e0+0.1, 40.0],)
-            injection_in[3] = p0
+            # run trajectory to get fixed inspiral
+            if get_fixed_inspiral:
+                p0 = get_p_at_t(traj_module,t_out,[M, mu, 0.0, e0, 1.0],index_of_p=3,index_of_a=2,index_of_e=4,index_of_x=5,traj_kwargs={},xtol=2e-6,rtol=8.881784197001252e-6,bounds=[6 + 2*e0+0.1, 40.0],)
+                injection_in[3] = p0
+            print('params ', M, mu, p0, e0)
 
             tic = time.perf_counter()
             # generate FD waveforms
@@ -262,7 +286,10 @@ def run_check(
     # store to h5 file
     dset.create_dataset("T", data=emri_kwargs['T'] )
     dset.create_dataset("dt", data=emri_kwargs['dt'] )
-    dset.create_dataset("eps", data=emri_kwargs['eps'] )
+    
+    if random_modes==False:
+        dset.create_dataset("eps", data=emri_kwargs['eps'] )
+    
     to_store = [
     mismatch,
     failed_points,
@@ -298,17 +325,14 @@ def run_check(
 
 if __name__ == "__main__":
     omp_set_num_threads(8)
-    Tobs = 1.05
-    dt = 5.0
-    eps = 1e-5
-
-    ntemps = 4
-    nwalkers = 30
+    Tobs = args['Tobs'] # 1.05
+    dt = args['dt'] #10.0
+    eps = args['eps'] #1e-5
 
     waveform_kwargs = {
         "T": Tobs,
         "dt": dt,
-        "eps": eps
+        "eps": eps,
     }
 
     fp = f"emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_"
@@ -317,7 +341,7 @@ if __name__ == "__main__":
         Tobs,
         dt,
         fp,
-        ntemps,
-        nwalkers,
-        emri_kwargs=waveform_kwargs
+        emri_kwargs = waveform_kwargs,
+        random_modes = False,
+        get_fixed_inspiral = True,
     )
