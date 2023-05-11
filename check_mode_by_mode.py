@@ -189,7 +189,7 @@ def run_check(
     timing_fd = []
     loglike = []
     
-    tot_numb = 50
+    tot_numb = 50000
     
     for el in range(tot_numb):
         

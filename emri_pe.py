@@ -277,7 +277,7 @@ def run_emri_pe(
     # this is a parent likelihood class that manages the parameter transforms
     nchannels = 2
     if template=='fd':
-        like_gen = fd_gen
+        like_gen = few_gen_list
     elif template=='td':
         like_gen = fft_td_gen
     
@@ -381,10 +381,40 @@ def run_emri_pe(
         log_prior=start_prior.reshape(ntemps, nwalkers)
     )
 
-    # MCMC moves (move, percentage of draws)
+    # MCMC gibbs
+    update_all = np.repeat(True,ndim)
+    update_none = np.repeat(False,ndim)
+    indx_list = []
+
+    def get_True_vec(ind_in):
+        out = update_none.copy()
+        out[ind_in] = update_all[ind_in]
+        return out
+    
+    indx_list.append(get_True_vec(np.arange(0,4)))
+    indx_list.append(get_True_vec(np.arange(4,ndim)))
+    gibbs_sampling =[('emri',np.asarray([indx_list[ii]])) for ii in range(len(indx_list))]
+    
+    # define move
     moves = [
-        StretchMove(use_gpu=use_gpu, live_dangerously=True)
+        StretchMove(use_gpu=use_gpu, live_dangerously=True, gibbs_sampling_setup=gibbs_sampling)
     ]
+
+    # define stopping function
+    import time
+    start = time.time()
+    def get_time(i, res, samp):
+
+        if (i%20==0):
+            print("acceptance ratio",samp.acceptance_fraction)
+            # print("last sample",samp.get_chain()['gwb'][-1,0,:,0,-7:])
+            print("max last loglike",np.max(samp.get_log_like()[-1]))
+
+        # if time.time()-start > 23.0*3600:
+        #     return True
+        # else:
+        return False
+
 
     from eryn.backends import HDFBackend
 
@@ -413,6 +443,8 @@ def run_emri_pe(
         periodic=periodic,  # TODO: add periodic to proposals
         #update_fn=None,
         #update_iterations=-1,
+        stopping_fn=get_time,
+        stopping_iterations=1
         branch_names=["emri"],
         info={"truth":emri_injection_params_in}
 
