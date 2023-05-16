@@ -28,6 +28,7 @@ from lisatools.sensitivity import get_sensitivity
 from few.waveform import GenerateEMRIWaveform
 from few.utils.utility import get_mu_at_t, get_p_at_t
 from eryn.utils import TransformContainer
+from few.utils.baseclasses import SchwarzschildEccentric
 import time
 from few.utils.utility import omp_set_num_threads
 import h5py
@@ -72,46 +73,19 @@ few_gen_list = GenerateEMRIWaveform(
     return_list=True
 )
 
-td_gen = GenerateEMRIWaveform(
+td_gen_list = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
     sum_kwargs=dict(pad_output=True, odd_len=True),
     use_gpu=use_gpu,
     return_list=True
 )
 
-# conversion
-class get_fd_waveform():
-
-    def __init__(self, waveform_generator):
-        self.waveform_generator = waveform_generator
-
-    def __call__(self,*args, **kwargs):
-        initial_out = self.waveform_generator(*args, **kwargs)
-        # frequency goes from -1/dt/2 up to 1/dt/2
-        self.frequency = self.waveform_generator.waveform_generator.create_waveform.frequency
-        self.positive_frequency_mask = (self.frequency>=0.0)
-        list_out = self.transform_FD(initial_out)
-        return [list_out[0][self.positive_frequency_mask], list_out[1][self.positive_frequency_mask]]
-
-    def transform_FD(self, input_signal):
-        fd_sig = -xp.flip(input_signal)
-        fft_sig_p = xp.real(fd_sig + xp.flip(fd_sig) )/2.0 + 1j * xp.imag(fd_sig - xp.flip(fd_sig))/2.0
-        fft_sig_c = -xp.imag(fd_sig + xp.flip(fd_sig) )/2.0 + 1j * xp.real(fd_sig - xp.flip(fd_sig))/2.0
-        return [fft_sig_p, fft_sig_c]
-
-
-class get_fd_waveform_fromTD():
-
-    def __init__(self, waveform_generator, positive_frequency_mask, dt):
-        self.waveform_generator = waveform_generator
-        self.positive_frequency_mask = positive_frequency_mask
-        self.dt = dt
-
-    def __call__(self,*args, **kwargs):
-        data_channels_td = self.waveform_generator(*args, **kwargs)
-        fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(data_channels_td[0]))[self.positive_frequency_mask] * self.dt
-        fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(data_channels_td[1]))[self.positive_frequency_mask] * self.dt
-        return [fft_td_wave_p,fft_td_wave_c]
+td_gen = GenerateEMRIWaveform(
+    "FastSchwarzschildEccentricFlux", 
+    sum_kwargs=dict(pad_output=True, odd_len=True),
+    use_gpu=use_gpu,
+    return_list=False
+)
 
 # function call
 def run_check(
@@ -123,6 +97,7 @@ def run_check(
     emri_kwargs={},
     random_modes=False,
     get_fixed_inspiral=True,
+    fixed_intrinsic=False,
 ):
 
     # for transforms
@@ -143,7 +118,7 @@ def run_check(
                 1: uniform_dist(np.log(1e-6), np.log(1e-4)),  # mass ratio
                 2: uniform_dist(10.0, 15.0),  # p0
                 3: uniform_dist(0.001, 0.7),  # e0
-                4: uniform_dist(0.01, 100.0),  # dist in Gpc
+                4: uniform_dist(1.0, 1.000001),  # dist in Gpc
                 5: uniform_dist(-0.99999, 0.99999),  # qS
                 6: uniform_dist(0.0, 2 * np.pi),  # phiS
                 7: uniform_dist(-0.99999, 0.99999),  # qK
@@ -211,6 +186,12 @@ def run_check(
         injection_in = transform_fn.both_transforms(tmp)[0]
 
         # set initial parameters
+        if fixed_intrinsic:
+            injection_in[0] = 1e6
+            injection_in[1] = 50
+            injection_in[3] = 10.0
+            injection_in[4] = 0.4
+    
         M = injection_in[0]
         mu = injection_in[1]
         p0 = injection_in[3]
@@ -224,47 +205,64 @@ def run_check(
                 p0 = get_p_at_t(traj_module,t_out,[M, mu, 0.0, e0, 1.0],index_of_p=3,index_of_a=2,index_of_e=4,index_of_x=5,traj_kwargs={},xtol=2e-6,rtol=8.881784197001252e-6,bounds=[6 + 2*e0+0.1, 40.0],)
                 injection_in[3] = p0
             print('params ', M, mu, p0, e0)
+            
+            check = SchwarzschildEccentric()
+            check.sanity_check_init(M,mu,p0,e0)
 
+            #-------------------------
             tic = time.perf_counter()
             # generate FD waveforms
             data_channels_fd = few_gen(*injection_in, **emri_kwargs)
+            # transform into hp and hc
+            toc = time.perf_counter()
+            fd_time = toc-tic
+            #-------------------------
+            # list version
+            sig_fd = few_gen_list(*injection_in, **emri_kwargs)
+            print("check 0 == ",xp.sum(sig_fd[0] - 1j *sig_fd[1] != data_channels_fd))
+
             # frequency goes from -1/dt/2 up to 1/dt/2
             frequency = few_gen.waveform_generator.create_waveform.frequency
             positive_frequency_mask = (frequency>=0.0)
-            fd_gen = get_fd_waveform(few_gen)
-            # transform into hp and hc
-            sig_fd = fd_gen.transform_FD(data_channels_fd)
-            toc = time.perf_counter()
-            fd_time = toc-tic
-
+            #-------------------------
             tic = time.perf_counter()
             # generate TD waveform, this will return a list with hp and hc
             data_channels_td = td_gen(*injection_in, **emri_kwargs)
-            # np.pad(data_channels_td[0], (10, 10), 'constant', constant_values=(0, 0))
-            # fft from negative to positive frequencies
-            fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(data_channels_td[1])) * dt
-            fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(data_channels_td[0])) * dt
-            sig_td = [fft_td_wave_p,fft_td_wave_c]
             toc = time.perf_counter()
             td_time = toc-tic
+            #-------------------------
+            # list version
+            sig_td = td_gen_list(*injection_in, **emri_kwargs)
+            fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(sig_td[0])) * dt
+            fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(sig_td[1])) * dt
+            sig_td = [fft_td_wave_p,fft_td_wave_c]
             
             # store timing
             timing_td.append(td_time)
             timing_fd.append(fd_time)
             list_injections.append(injection_in)
-
             print("TD/FD time",td_time/fd_time, "TD", td_time, "FD", fd_time )
-            
-            if el>0:
-                factor.append(td_time/fd_time)
+            factor.append(td_time/fd_time)
+
             # kwargs for computing inner products
             fd_inner_product_kwargs = dict( PSD="cornish_lisa_psd", use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
-            sig_fd = few_gen_list(*injection_in, **emri_kwargs) # [sig_fd[0][positive_frequency_mask],sig_fd[1][positive_frequency_mask]]
+            # check no list
+            nolist_check = inner_product(
+                data_channels_fd[positive_frequency_mask],
+                xp.fft.fftshift(xp.fft.fft(data_channels_td))[positive_frequency_mask] * dt, 
+                normalize=True, **fd_inner_product_kwargs)
+            print("must be approximately 1~",nolist_check)
+
+            sig_fd = [sig_fd[0][positive_frequency_mask],sig_fd[1][positive_frequency_mask]]
             sig_td = [sig_td[0][positive_frequency_mask],sig_td[1][positive_frequency_mask]]
             
             # mismatch
             Mism = np.abs(1-inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs))
             print("mismatch total and partial ", Mism)
+            if Mism>0.01:
+                mask_non_zero = (sig_fd[0]!=complex(0.0))
+                plt.figure(); plt.loglog( xp.abs(sig_fd[0][mask_non_zero]).get()**2 ); plt.loglog( xp.abs(sig_td[0][mask_non_zero]).get()**2 ); plt.savefig(f'high_mism/mism{Mism}.png')
+
             if use_gpu:
                 mismatch.append(Mism.get())
             else:
@@ -324,7 +322,8 @@ def run_check(
     return
 
 if __name__ == "__main__":
-    omp_set_num_threads(8)
+    # set number of threads
+    omp_set_num_threads(4)
     Tobs = args['Tobs'] # 1.05
     dt = args['dt'] #10.0
     eps = args['eps'] #1e-5
@@ -342,6 +341,6 @@ if __name__ == "__main__":
         dt,
         fp,
         emri_kwargs = waveform_kwargs,
-        random_modes = False,
-        get_fixed_inspiral = True,
+        random_modes = True,
+        get_fixed_inspiral = False,
     )
