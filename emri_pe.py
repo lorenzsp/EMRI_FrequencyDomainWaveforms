@@ -98,26 +98,6 @@ td_gen = GenerateEMRIWaveform(
 
 
 # conversion
-class get_fd_waveform():
-
-    def __init__(self, waveform_generator):
-        self.waveform_generator = waveform_generator
-
-    def __call__(self,*args, **kwargs):
-        initial_out = self.waveform_generator(*args, **kwargs)
-        # frequency goes from -1/dt/2 up to 1/dt/2
-        self.frequency = self.waveform_generator.waveform_generator.create_waveform.frequency
-        self.positive_frequency_mask = (self.frequency>=0.0)
-        list_out = self.transform_FD(initial_out)
-        return [list_out[0][self.positive_frequency_mask], list_out[1][self.positive_frequency_mask]]
-
-    def transform_FD(self, input_signal):
-        fd_sig = -xp.flip(input_signal)
-        fft_sig_p = xp.real(fd_sig + xp.flip(fd_sig) )/2.0 + 1j * xp.imag(fd_sig - xp.flip(fd_sig))/2.0
-        fft_sig_c = -xp.imag(fd_sig + xp.flip(fd_sig) )/2.0 + 1j * xp.real(fd_sig - xp.flip(fd_sig))/2.0
-        return [fft_sig_p, fft_sig_c]
-
-
 class get_fd_waveform_fromTD():
 
     def __init__(self, waveform_generator, positive_frequency_mask, dt):
@@ -264,6 +244,8 @@ def run_emri_pe(
     fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(data_channels_td[1])) * dt
     fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(data_channels_td[0])) * dt
     # consider only positive frequencies
+    fft_td_gen = get_fd_waveform_fromTD(td_gen_list, positive_frequency_mask, dt)
+    print('check TD transform', xp.all(fft_td_gen(*injection_in, **emri_kwargs)[0] == fft_td_wave_p[positive_frequency_mask]) )
     sig_td = [fft_td_wave_p[positive_frequency_mask],fft_td_wave_c[positive_frequency_mask] ]
 
     # kwargs for computing inner products
@@ -292,7 +274,6 @@ def run_emri_pe(
     else:
         data_stream = sig_td
 
-    
     if downsample:
         # list the indeces 
         lst_ind = list(range(len(frequency)))
@@ -475,6 +456,7 @@ def run_emri_pe(
     return
 
 if __name__ == "__main__":
+    
     # set parameters
     M = args['M'] # 1e6
     a = 0.1  # will be ignored in Schwarzschild waveform
