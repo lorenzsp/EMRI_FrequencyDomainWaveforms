@@ -1,6 +1,6 @@
 # nohup python emri_pe.py > out.out &
 import argparse
-# python emri_pe.py -Tobs 1.0 -M 1e6 -mu 10.0 -p0 12 -e0 0.35 -dev 5 -eps 1e-3 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2
+# python emri_pe.py -Tobs 1.0 -M 1e6 -mu 10.0 -p0 12 -e0 0.35 -dev 5 -eps 1e-3 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 0
 parser = argparse.ArgumentParser(description='MCMC few')
 parser.add_argument('-Tobs','--Tobs', help='Observation Time in years', required=True, type=float)
 parser.add_argument('-M','--M', help='MBH Mass in solar masses', required=True, type=float)
@@ -9,11 +9,12 @@ parser.add_argument('-p0','--p0', help='Semi-latus Rectum', required=True, type=
 parser.add_argument('-e0','--e0', help='Eccentricity', required=True, type=float)
 parser.add_argument('-dev','--dev', help='Cuda Device', required=True, type=int)
 parser.add_argument('-eps','--eps', help='eps mode selection', required=True, type=float)
-parser.add_argument('-dt','--dt', help='delta t', required=False, type=float)
-parser.add_argument('-injectFD','--injectFD', required=False, type=int)
-parser.add_argument('-template','--template', required=False, type=str)
-parser.add_argument('-nwalkers','--nwalkers', required=False, type=int)
-parser.add_argument('-ntemps','--ntemps', required=False, type=int)
+parser.add_argument('-dt','--dt', help='delta t', required=True, type=float)
+parser.add_argument('-injectFD','--injectFD', required=True, type=int)
+parser.add_argument('-template','--template', required=True, type=str)
+parser.add_argument('-downsample','--downsample', required=True, type=int)
+parser.add_argument('-nwalkers','--nwalkers', required=True, type=int)
+parser.add_argument('-ntemps','--ntemps', required=True, type=int)
 
 args = vars(parser.parse_args())
 
@@ -41,7 +42,7 @@ from few.trajectory.inspiral import EMRIInspiral
 
 from eryn.utils import TransformContainer
 from few.utils.utility import omp_set_num_threads
-omp_set_num_threads(8)
+omp_set_num_threads(4)
 
 import time
 import matplotlib.pyplot as plt
@@ -74,20 +75,27 @@ few_gen = GenerateEMRIWaveform(
     return_list=False
 )
 
-td_gen = GenerateEMRIWaveform(
-    "FastSchwarzschildEccentricFlux", 
-    sum_kwargs=dict(pad_output=True, odd_len=True),
-    use_gpu=use_gpu,
-    return_list=True
-)
-
-
 few_gen_list = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
     sum_kwargs=dict(pad_output=True, output_type="fd", odd_len=True),
     use_gpu=use_gpu,
     return_list=True
 )
+
+td_gen_list = GenerateEMRIWaveform(
+    "FastSchwarzschildEccentricFlux", 
+    sum_kwargs=dict(pad_output=True, odd_len=True),
+    use_gpu=use_gpu,
+    return_list=True
+)
+
+td_gen = GenerateEMRIWaveform(
+    "FastSchwarzschildEccentricFlux", 
+    sum_kwargs=dict(pad_output=True, odd_len=True),
+    use_gpu=use_gpu,
+    return_list=False
+)
+
 
 # conversion
 class get_fd_waveform():
@@ -241,29 +249,26 @@ def run_emri_pe(
     # frequency goes from -1/dt/2 up to 1/dt/2
     frequency = few_gen.waveform_generator.create_waveform.frequency
     positive_frequency_mask = (frequency>=0.0)
-    # define converions class
-    fd_gen = get_fd_waveform(few_gen)
     # transform into hp and hc
-    sig_fd = fd_gen.transform_FD(data_channels_fd)
+    emri_kwargs['mask_positive']=True
+    sig_fd = few_gen_list(*injection_in, **emri_kwargs)
     
     # generate TD waveform, this will return a list with hp and hc
-    data_channels_td = td_gen(*injection_in, **emri_kwargs)
+    data_channels_td = td_gen_list(*injection_in, **emri_kwargs)
     tic = time.perf_counter()
     [td_gen(*injection_in, **emri_kwargs) for _ in range(10)]
     toc = time.perf_counter()
     fd_time = toc-tic
     print('td time', fd_time/10)
-    fft_td_gen = get_fd_waveform_fromTD(td_gen,positive_frequency_mask,dt)
     # fft from negative to positive frequencies
     fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(data_channels_td[1])) * dt
     fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(data_channels_td[0])) * dt
-    sig_td = [fft_td_wave_p,fft_td_wave_c]
-    # sig_td = fft_td_gen(*injection_in, **emri_kwargs)
+    # consider only positive frequencies
+    sig_td = [fft_td_wave_p[positive_frequency_mask],fft_td_wave_c[positive_frequency_mask] ]
 
     # kwargs for computing inner products
+    print('shape', sig_td[0].shape, sig_fd[0].shape )
     fd_inner_product_kwargs = dict( PSD="cornish_lisa_psd", use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
-    sig_fd = few_gen_list(*injection_in, **emri_kwargs)#[sig_fd[0][positive_frequency_mask],sig_fd[1][positive_frequency_mask]]
-    sig_td = [sig_td[0][positive_frequency_mask],sig_td[1][positive_frequency_mask]]
 
     print("Overlap total and partial ", inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs),
     inner_product(sig_fd[0], sig_td[0], normalize=True, **fd_inner_product_kwargs),
@@ -289,20 +294,23 @@ def run_emri_pe(
 
     
     if downsample:
+        # list the indeces 
         lst_ind = list(range(len(frequency)))
-        # make sure there is the zero frequency
-        check_vec = np.asarray([1==np.sum(frequency[lst_ind[0::ii]]==0.0) for ii in range(10,500)])
-
-        ii = np.arange(10,500)[check_vec][-1]
+        # make sure there is the zero frequency when you jump
+        check_vec = xp.asarray([1==xp.sum(frequency[lst_ind[0::ii]]==0.0) for ii in range(2,500)])
+        # find the one that has the zero frequency
+        ii = int(xp.arange(2,500)[check_vec][-1])
         print('--------------------------')
         print('skip every ',ii, 'th element')
         print('number of frequencies', len(frequency[lst_ind[0::ii]]))
         print('percentage of frequencies', len(frequency[lst_ind[0::ii]])/len(frequency))
+        # add f_arr to the kwarguments
         emri_kwargs['f_arr'] = frequency[lst_ind[0::ii]]
         if use_gpu:
             f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0].get()
         else:
             f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0]
+        # downsample data stream
         data_stream = [el[0::ii] for el in data_stream]
 
     else:
@@ -401,7 +409,6 @@ def run_emri_pe(
     ]
 
     # define stopping function
-    import time
     start = time.time()
     def get_time(i, res, samp):
 
@@ -444,7 +451,7 @@ def run_emri_pe(
         #update_fn=None,
         #update_iterations=-1,
         stopping_fn=get_time,
-        stopping_iterations=1
+        stopping_iterations=1,
         branch_names=["emri"],
         info={"truth":emri_injection_params_in}
 
@@ -489,6 +496,7 @@ if __name__ == "__main__":
     eps = args['eps'] # 1e-5
     injectFD = args['injectFD'] #0
     template = args['template'] #'fd'
+    downsample = bool(args['downsample'])
 
     ntemps = args['ntemps']
     nwalkers = args['nwalkers']
@@ -510,7 +518,7 @@ if __name__ == "__main__":
     )
     print("new p0 ", p0)
 
-    downsample = False
+    
     fp = f"emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + ".h5"
 
     emri_injection_params = np.array([
