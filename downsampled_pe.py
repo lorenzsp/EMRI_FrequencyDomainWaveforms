@@ -306,9 +306,10 @@ def run_emri_pe(
     # list the indeces 
     lst_ind = list(range(len(frequency)))
     # make sure there is the zero frequency when you jump
-    check_vec = xp.asarray([1==xp.sum(frequency[lst_ind[0::ii]]==0.0) for ii in range(2,500)])
+    upper = 10_000
+    check_vec = xp.asarray([1==xp.sum(frequency[lst_ind[0::ii]]==0.0) for ii in range(2,upper)])
     # find the one that has the zero frequency
-    ii = int(xp.arange(2,500)[check_vec][-1])
+    ii = int(xp.arange(2,upper)[check_vec][-1])
     print('--------------------------')
     print('skip every ',ii, 'th element')
     print('number of frequencies', len(frequency[lst_ind[0::ii]]))
@@ -324,7 +325,7 @@ def run_emri_pe(
     data_stream = [el[0::ii] for el in data_stream]
 
     like_downsampled = Likelihood(
-        like_gen,
+        few_gen_list,
         nchannels,  # channels (plus,cross)
         parameter_transforms={"emri": transform_fn},
         vectorized=False,
@@ -350,8 +351,9 @@ def run_emri_pe(
     factor = 1e-15
     
     cov = factor * np.load("covariance.npy")
-
     start_params = np.random.multivariate_normal(emri_injection_params_in, cov, size=nwalkers * ntemps)
+    start_params = np.load("samples_to_test.npy")[:int(nwalkers * ntemps)]
+
     start_prior = priors["emri"].logpdf(start_params)
     
     start_like = []
