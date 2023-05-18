@@ -1,4 +1,5 @@
 # nohup python emri_pe.py > out.out &
+# nohup python emri_pe.py -Tobs 2.0 -M 1e6 -mu 10.0 -p0 12.0 -e0 0.35 -dev 7 -eps 1e-3 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 1 > out4.out &
 import argparse
 # python emri_pe.py -Tobs 1.0 -M 1e6 -mu 10.0 -p0 12 -e0 0.35 -dev 5 -eps 1e-3 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 0
 parser = argparse.ArgumentParser(description='MCMC few')
@@ -256,6 +257,7 @@ def run_emri_pe(
     inner_product(sig_fd[0], sig_td[0], normalize=True, **fd_inner_product_kwargs),
     inner_product(sig_fd[1], sig_td[1], normalize=True, **fd_inner_product_kwargs)
     )
+
     print("frequency len",len(frequency), " make sure that it is odd")
     print("last point in TD", data_channels_td[0][-1])
     check_snr = snr(sig_fd, **fd_inner_product_kwargs)
@@ -314,7 +316,7 @@ def run_emri_pe(
     like.inject_signal(
         data_stream=data_stream,
         # params= injection_params.copy()[test_inds],
-        waveform_kwargs=waveform_kwargs,
+        waveform_kwargs=emri_kwargs,
         noise_fn=get_sensitivity,
         noise_kwargs=dict(sens_fn="cornish_lisa_psd"),
         add_noise=False,
