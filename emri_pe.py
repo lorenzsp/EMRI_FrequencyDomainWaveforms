@@ -42,7 +42,7 @@ from few.trajectory.inspiral import EMRIInspiral
 
 from eryn.utils import TransformContainer
 from few.utils.utility import omp_set_num_threads
-omp_set_num_threads(4)
+omp_set_num_threads(16)
 
 import time
 import matplotlib.pyplot as plt
