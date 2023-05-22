@@ -8,21 +8,39 @@
 # Define an array of values for Tobs, eps, and dt
 #!/bin/bash
 
-# Define an array of values for Tobs, eps, and dt
-Tobs_values=(4)
-eps_values=(1e-2)
-dt_values=(1.0)
 
 # Iterate over the values
-for Tobs in "${Tobs_values[@]}"; do
-  for eps in "${eps_values[@]}"; do
-    for dt in "${dt_values[@]}"; do
-      # Create a unique string for the output file
-      output_file="outcheck_Tobs${2.0}_eps${eps}_dt${dt}.out"
+Tobs = 4
+eps_values = 1e-2
+dt_values = 1.0
+output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
+nohup python check_mode_by_mode.py -Tobs $Tobs -dev 4 -eps $eps -dt $dt > "$output_file" &
 
-      # Run Python code with current variable values
-      nohup python check_mode_by_mode.py -Tobs 2.0 -dev $Tobs -eps $eps -dt $dt > "$output_file" &
-    done
-  done
-done
+Tobs = 4
+eps_values = 1e-5
+dt_values = 1.0
+output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
+nohup python check_mode_by_mode.py -Tobs $Tobs -dev 5 -eps $eps -dt $dt > "$output_file" &
+
+Tobs = 4
+eps_values = 1e-5
+dt_values = 10.0
+output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
+nohup python check_mode_by_mode.py -Tobs $Tobs -dev 6 -eps $eps -dt $dt > "$output_file" &
+
+# # Define an array of values for Tobs, eps, and dt
+# Tobs_values=(4)
+# eps_values=(1e-2)
+# dt_values=(1.0)
+# for Tobs in "${Tobs_values[@]}"; do
+#   for eps in "${eps_values[@]}"; do
+#     for dt in "${dt_values[@]}"; do
+#       # Create a unique string for the output file
+#       output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
+
+#       # Run Python code with current variable values
+#       nohup python check_mode_by_mode.py -Tobs $Tobs -dev  -eps $eps -dt $dt > "$output_file" &
+#     done
+#   done
+# done
 

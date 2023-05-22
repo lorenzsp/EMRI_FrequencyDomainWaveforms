@@ -1,3 +1,8 @@
+import os
+print("PID:",os.getpid())
+os.system("export OMP_NUM_THREADS=4")
+os.environ["OMP_NUM_THREADS"] = "4"
+
 import argparse
 # python check_mode_by_mode.py -Tobs 1.0 -dev 5 -eps 1e-3 -dt 10.0 -fixed_insp 1
 parser = argparse.ArgumentParser(description='MCMC few')
@@ -18,7 +23,6 @@ from eryn.state import State
 from eryn.ensemble import EnsembleSampler
 from eryn.prior import ProbDistContainer, uniform_dist
 import corner
-from lisatools.utils.utility import AET
 
 from eryn.moves import StretchMove
 from lisatools.sampling.likelihood import Likelihood
@@ -59,9 +63,6 @@ warnings.filterwarnings("ignore")
 
 if use_gpu and not gpu_available:
     raise ValueError("Requesting gpu with no GPU available or cupy issue.")
-
-# set number of threads
-omp_set_num_threads(4)
 
 frame = 'detector'
 few_gen = GenerateEMRIWaveform(
@@ -107,7 +108,7 @@ def run_check(
     random_modes=False,
     get_fixed_inspiral=True,
     fixed_intrinsic=False,
-    tot_numb = 100,
+    tot_numb = 50,
 ):
 
     # for transforms
@@ -220,13 +221,26 @@ def run_check(
             check = SchwarzschildEccentric()
             check.sanity_check_init(M,mu,p0,e0)
 
+            it_speed = 5
             #-------------------------
             tic = time.perf_counter()
             # generate FD waveforms
-            data_channels_fd = few_gen(*injection_in, **emri_kwargs)
+            [few_gen(*injection_in, **emri_kwargs) for _ in range(it_speed)]
             # transform into hp and hc
             toc = time.perf_counter()
-            fd_time = toc-tic
+            fd_time = (toc-tic)/it_speed
+
+            # downsampled
+            kw_downsampled = emri_kwargs.copy()
+            kw_downsampled['f_arr'] = xp.fft.fftshift(xp.fft.fftfreq(1001, dt))
+            tic = time.perf_counter()
+            # generate FD waveforms
+            [few_gen(*injection_in, **kw_downsampled) for _ in range(it_speed)]
+            # transform into hp and hc
+            toc = time.perf_counter()
+            fd_time_downsampled = (toc-tic)/it_speed
+
+            data_channels_fd = few_gen(*injection_in, **emri_kwargs)
             #-------------------------
             # list version
             sig_fd = few_gen_list(*injection_in, **emri_kwargs)
@@ -239,9 +253,10 @@ def run_check(
             #-------------------------
             tic = time.perf_counter()
             # generate TD waveform, this will return a list with hp and hc
-            data_channels_td = td_gen(*injection_in, **emri_kwargs)
+            [td_gen(*injection_in, **emri_kwargs) for _ in range(it_speed)]
             toc = time.perf_counter()
-            td_time = toc-tic
+            td_time = (toc-tic)/it_speed
+            data_channels_td = td_gen(*injection_in, **emri_kwargs)
             #-------------------------
             # list version
             signal_in_td = td_gen_list(*injection_in, **emri_kwargs)
@@ -257,21 +272,20 @@ def run_check(
             timing_td.append(td_time)
             timing_fd.append(fd_time)
             list_injections.append(injection_in)
-            print("TD/FD time",td_time/fd_time, "TD", td_time, "FD", fd_time )
+            print("TD/FD time",td_time/fd_time, "TD", td_time, "FD", fd_time, "FD downsampled", fd_time_downsampled )
             factor.append(td_time/fd_time)
 
             # kwargs for computing inner products
             fd_inner_product_kwargs = dict( PSD="cornish_lisa_psd", use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
 
-            # get SNR
-            sig = [sig_fd[0][positive_frequency_mask],sig_fd[1][positive_frequency_mask]]
-            SNR = np.sqrt(float(inner_product(sig, sig, **fd_inner_product_kwargs)))
-            print('SNR', SNR)
-            SNR_list.append(SNR)
-            norm = 20.0/SNR
-
             sig_fd = [el[positive_frequency_mask] for el in sig_fd]
             sig_td = [el[positive_frequency_mask] for el in sig_td]
+
+            # get SNR
+            SNR = [np.sqrt(float(inner_product(el, el, **fd_inner_product_kwargs))) for el in [sig_fd, sig_fd_windowed] ]
+            print('SNR', SNR)
+            SNR_list.append(SNR)
+            # norm = 20.0/SNR
 
             # mismatch 
             Mism = xp.abs(1-inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs))
@@ -285,8 +299,10 @@ def run_check(
             
             # loglike
             sig_inner = [sig_fd[0]-sig_td[0],sig_fd[1]-sig_td[1]]
+            sig_inner_windowed = [sig_fd_windowed[0]-sig_td_windowed[0],sig_fd_windowed[1]-sig_td_windowed[1]]
             if use_gpu:
                 logl = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs).get() for el in sig_inner])
+                logl_windowed = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs).get() for el in sig_inner_windowed])
             else:
                 logl = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs) for el in sig_inner])
 
@@ -304,11 +320,11 @@ def run_check(
             #     else:
             #         plt.figure(); plt.loglog(ff, xp.abs(toplot)**2 ); plt.savefig(f'high_mism/logl{logl}.png')
 
-            print("logl ", logl)
-            loglike.append(logl)
+            print("logl ", logl, logl_windowed)
+            loglike.append([logl, logl_windowed])
 
         except:
-            breakpoint()
+            # breakpoint()
             failed_points.append(injection_in)
             print("not found for params",tmp[:3])
     
@@ -338,7 +354,7 @@ def run_check(
     dset.create_dataset("timing_td", data=timing_td)
     dset.create_dataset("timing_fd", data=timing_fd)
     dset.create_dataset("loglike", data=loglike)
-    dset.create_dataset("SNR", data=SNR)
+    dset.create_dataset("SNR", data=SNR_list)
 
     plt.figure()
     plt.hist(factor,bins=25)
@@ -358,6 +374,9 @@ def run_check(
 
 if __name__ == "__main__":
     
+    # set number of threads
+    # omp_set_num_threads(4)
+
     Tobs = args['Tobs'] # 1.05
     dt = args['dt'] #10.0
     eps = args['eps'] #1e-5
@@ -368,7 +387,7 @@ if __name__ == "__main__":
         "eps": eps,
     }
 
-    fp = f"emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}"
+    fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}"
 
     run_check(
         Tobs,
@@ -377,5 +396,5 @@ if __name__ == "__main__":
         emri_kwargs = waveform_kwargs,
         random_modes = False,
         get_fixed_inspiral = bool(args['fixed_insp']),
-        tot_numb = 5000
+        tot_numb = 100
     )
