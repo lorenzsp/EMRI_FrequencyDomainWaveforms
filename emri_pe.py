@@ -35,7 +35,8 @@ from eryn.moves import StretchMove
 from lisatools.sampling.likelihood import Likelihood
 from lisatools.diagnostic import *
 
-from lisatools.sensitivity import get_sensitivity
+# from lisatools.sensitivity import get_sensitivity
+from FDutils import *
 
 from few.waveform import GenerateEMRIWaveform
 from few.utils.utility import get_p_at_t
@@ -73,44 +74,33 @@ few_gen = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
     sum_kwargs=dict(pad_output=True, output_type="fd", odd_len=True),
     use_gpu=use_gpu,
-    return_list=False
+    return_list=False,
+    # frame='source',
 )
 
 few_gen_list = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
     sum_kwargs=dict(pad_output=True, output_type="fd", odd_len=True),
     use_gpu=use_gpu,
-    return_list=True
+    return_list=True,
+    # frame='source',
 )
 
 td_gen_list = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
     sum_kwargs=dict(pad_output=True, odd_len=True),
     use_gpu=use_gpu,
-    return_list=True
+    return_list=True,
+    # frame='source',
 )
 
 td_gen = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux", 
     sum_kwargs=dict(pad_output=True, odd_len=True),
     use_gpu=use_gpu,
-    return_list=False
+    return_list=False,
+    # frame='source',
 )
-
-
-# conversion
-class get_fd_waveform_fromTD():
-
-    def __init__(self, waveform_generator, positive_frequency_mask, dt):
-        self.waveform_generator = waveform_generator
-        self.positive_frequency_mask = positive_frequency_mask
-        self.dt = dt
-
-    def __call__(self,*args, **kwargs):
-        data_channels_td = self.waveform_generator(*args, **kwargs)
-        fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(data_channels_td[0]))[self.positive_frequency_mask] * self.dt
-        fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(data_channels_td[1]))[self.positive_frequency_mask] * self.dt
-        return [fft_td_wave_p,fft_td_wave_c]
 
 # function call
 def run_emri_pe(
@@ -279,10 +269,11 @@ def run_emri_pe(
     if downsample:
         # list the indeces 
         lst_ind = list(range(len(frequency)))
+        upp = 10000
         # make sure there is the zero frequency when you jump
-        check_vec = xp.asarray([1==xp.sum(frequency[lst_ind[0::ii]]==0.0) for ii in range(2,500)])
+        check_vec = xp.asarray([1==xp.sum(frequency[lst_ind[0::ii]]==0.0) for ii in range(2,upp)])
         # find the one that has the zero frequency
-        ii = int(xp.arange(2,500)[check_vec][-1])
+        ii = int(xp.arange(2,upp)[check_vec][-1])
         print('--------------------------')
         print('skip every ',ii, 'th element')
         print('number of frequencies', len(frequency[lst_ind[0::ii]]))
@@ -319,7 +310,7 @@ def run_emri_pe(
         waveform_kwargs=emri_kwargs,
         noise_fn=get_sensitivity,
         noise_kwargs=dict(sens_fn="cornish_lisa_psd"),
-        add_noise=False,
+        add_noise=True,
     )
 
     ndim = 11
