@@ -2,6 +2,12 @@
 
 This folder contains the analysis of the Fourier Domain EMRI Waveform implemented in the package Fast EMRI Waveforms ([arxiv.org/2104.04582](https://arxiv.org/abs/2104.04582), [arxiv.org/2008.06071](https://arxiv.org/abs/2008.06071)). To run the scripts constained in this folder please install the Fast EMRI Waveforms package and then install the additional packages uding `pip install tqdm corner`.
 
+```
+export PATH=$PATH:/usr/local/cuda-12.1/bin/
+conda activate fd_env
+pip install cupy-cuda12x
+```
+
 # Info downsampled posterior
 skip every  235 th element
 number of frequencies 26859

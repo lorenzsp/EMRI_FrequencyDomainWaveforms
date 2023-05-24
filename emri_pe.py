@@ -158,8 +158,8 @@ def run_emri_pe(
             {
                 0: uniform_dist(np.log(5e5), np.log(5e6)),  # M
                 1: uniform_dist(np.log(1e-6), np.log(1e-4)),  # mass ratio
-                2: uniform_dist(7.0, 15.0),  # p0
-                3: uniform_dist(0.001, 0.5),  # e0
+                2: uniform_dist(10.0, 15.0),  # p0
+                3: uniform_dist(0.001, 0.7),  # e0
                 4: uniform_dist(0.0, 2 * np.pi),  # Phi_phi0
                 5: uniform_dist(0.0, 2 * np.pi),  # Phi_r0
             }
@@ -278,7 +278,7 @@ def run_emri_pe(
         parameter_transforms={"emri": transform_fn},
         vectorized=False,
         transpose_params=False,
-        subset=4,  # may need this subset
+        subset= nwalkers * ntemps,  # may need this subset
         f_arr = f_arr,
         use_gpu=use_gpu
     )
@@ -387,7 +387,7 @@ def run_emri_pe(
         print("initial loglike",log_like)
         start_state = State(coords, log_like=log_like, log_prior=log_prior, inds=inds)
 
-    nsteps = 100000
+    nsteps = 10000
     out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
 
     # get samples
@@ -411,7 +411,7 @@ if __name__ == "__main__":
     phiK = np.pi/3  # azimuthal viewing angle
     qS = np.pi/3  # polar sky angle
     phiS = np.pi/3  # azimuthal viewing angle
-    dist = 3.0  # distance
+    dist = 1.0  # distance
     Phi_phi0 = np.pi/3
     Phi_theta0 = 0.0
     Phi_r0 = np.pi/3
@@ -444,7 +444,7 @@ if __name__ == "__main__":
     print("new p0 ", p0)
 
     
-    fp = f"emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + ".h5"
+    fp = f"results/MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + ".h5"
 
     emri_injection_params = np.array([
         M,  

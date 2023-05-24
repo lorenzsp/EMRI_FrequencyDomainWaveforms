@@ -1,7 +1,9 @@
 import os
 print("PID:",os.getpid())
-os.system("export OMP_NUM_THREADS=4")
-os.environ["OMP_NUM_THREADS"] = "4"
+# from few.utils.utility import omp_set_num_threads
+
+# os.system("export OMP_NUM_THREADS=4")
+# os.environ["OMP_NUM_THREADS"] = "4"
 
 import argparse
 # python check_mode_by_mode.py -Tobs 1.0 -dev 5 -eps 1e-3 -dt 10.0 -fixed_insp 1
@@ -38,10 +40,11 @@ traj_module = EMRIInspiral(func="SchwarzEccFlux")
 
 from eryn.utils import TransformContainer
 from few.utils.baseclasses import SchwarzschildEccentric
-import time
 from few.utils.utility import omp_set_num_threads
-import h5py
 
+import time
+
+import h5py
 from scipy.signal.windows import tukey, hann
 
 import matplotlib.pyplot as plt
@@ -127,9 +130,9 @@ def run_check(
     priors = {
         "emri": ProbDistContainer(
             {
-                0: uniform_dist(np.log(5e5), np.log(5e6)),  # M
+                0: uniform_dist(np.log(5e6), np.log(1e7)),  # M
                 1: uniform_dist(np.log(1e-6), np.log(1e-4)),  # mass ratio
-                2: uniform_dist(7.0, 15.0),  # p0
+                2: uniform_dist(10.0, 16.0),  # p0
                 3: uniform_dist(0.001, 0.7),  # e0
                 4: uniform_dist(0.0, 2 * np.pi),  # Phi_phi0
                 5: uniform_dist(0.0, 2 * np.pi),  # Phi_r0
@@ -139,7 +142,7 @@ def run_check(
 
     # sampler treats periodic variables by wrapping them properly
     periodic = {
-        "emri": {4: 2 * np.pi, 5: np.pi}
+        "emri": {4: 2 * np.pi, 5: 2 * np.pi}
     }
 
     def transform_mass_ratio(logM, logeta):
@@ -199,46 +202,64 @@ def run_check(
             # run trajectory to get fixed inspiral
             if get_fixed_inspiral:
                 print('params ', M, mu, p0, e0)
-                mu = get_mu_at_t(traj_module,t_out,[M, 0.0, p0, e0, 1.0],index_of_mu=1,traj_kwargs={},xtol=2e-6,rtol=8.881784197001252e-6,bounds=[0.1,1e4])
-                injection_in[1] = mu
+                p0 = get_p_at_t(
+                traj_module,
+                t_out,
+                [M, mu, 0.0, e0, 1.0],
+                index_of_p=3,
+                index_of_a=2,
+                index_of_e=4,
+                index_of_x=5,
+                traj_kwargs={},
+                xtol=2e-12,
+                rtol=8.881784197001252e-16,
+                bounds=None,
+                )
+                injection_in[3] = p0
+                # mu = get_mu_at_t(traj_module,t_out,[M, 0.0, p0, e0, 1.0],index_of_mu=1,traj_kwargs={},xtol=2e-6,rtol=8.881784197001252e-6,bounds=[0.1,1e4])
+                # injection_in[1] = mu
             print('params ', M, mu, p0, e0)
             
             check = SchwarzschildEccentric()
             check.sanity_check_init(M,mu,p0,e0)
 
-            it_speed = 1
+            it_speed = 2
             #-------------------------
             tic = time.perf_counter()
             # generate FD waveforms
-            [few_gen(*injection_in, **emri_kwargs) for _ in range(it_speed)]
+            for _ in range(it_speed):
+                few_gen(*injection_in, **emri_kwargs)
             # transform into hp and hc
             toc = time.perf_counter()
             fd_time = (toc-tic)/it_speed
-
-            # # downsampled
-            # kw_downsampled = emri_kwargs.copy()
-            # kw_downsampled['f_arr'] = xp.fft.fftshift(xp.fft.fftfreq(1001, dt))
-            # tic = time.perf_counter()
-            # # generate FD waveforms
-            # [few_gen(*injection_in, **kw_downsampled) for _ in range(it_speed)]
-            # # transform into hp and hc
-            # toc = time.perf_counter()
-            fd_time_downsampled = 0.0#(toc-tic)/it_speed
-
             data_channels_fd = few_gen(*injection_in, **emri_kwargs)
+
+            # downsampled
+            kw_downsampled = emri_kwargs.copy()
+            kw_downsampled['f_arr'] = xp.fft.fftshift(xp.fft.fftfreq( int(len(data_channels_fd)*0.01) , dt))
+            tic = time.perf_counter()
+            # generate FD waveforms
+            for _ in range(it_speed):
+                few_gen(*injection_in, **kw_downsampled)
+            # transform into hp and hc
+            toc = time.perf_counter()
+            fd_time_downsampled = (toc-tic)/it_speed
+
+            
             #-------------------------
             # list version
             sig_fd = few_gen_list(*injection_in, **emri_kwargs)
             print("check 1 == ", xp.dot(xp.conj(sig_fd[0] - 1j * sig_fd[1]),data_channels_fd)/xp.dot(xp.conj(data_channels_fd),data_channels_fd) )
 
             # frequency goes from -1/dt/2 up to 1/dt/2
-            frequency = few_gen.waveform_generator.create_waveform.frequency
+            frequency = few_gen_list.waveform_generator.create_waveform.frequency
             positive_frequency_mask = (frequency>=0.0)
             mask_non_zero = (sig_fd[0][positive_frequency_mask]!=complex(0.0))
             #-------------------------
             tic = time.perf_counter()
             # generate TD waveform, this will return a list with hp and hc
-            [td_gen(*injection_in, **emri_kwargs) for _ in range(it_speed)]
+            for _ in range(it_speed):
+                td_gen(*injection_in, **emri_kwargs)
             toc = time.perf_counter()
             td_time = (toc-tic)/it_speed
             data_channels_td = td_gen(*injection_in, **emri_kwargs)
@@ -310,7 +331,7 @@ def run_check(
             loglike.append([logl, logl_windowed])
 
         except:
-            breakpoint()
+            # breakpoint()
             failed_points.append(injection_in)
             print("not found for params",tmp[:3])
     
@@ -361,7 +382,7 @@ def run_check(
 if __name__ == "__main__":
     
     # set number of threads
-    # omp_set_num_threads(4)
+    omp_set_num_threads(1)
 
     Tobs = args['Tobs'] # 1.05
     dt = args['dt'] #10.0
@@ -372,15 +393,15 @@ if __name__ == "__main__":
         "dt": dt,
         "eps": eps,
     }
-
-    fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}"
+    tot_numb = 10000
+    fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}"
 
     run_check(
         Tobs,
         dt,
         fp,
         emri_kwargs = waveform_kwargs,
-        random_modes = True,
+        random_modes = False,
         get_fixed_inspiral = bool(args['fixed_insp']),
-        tot_numb = 10
+        tot_numb = tot_numb
     )
