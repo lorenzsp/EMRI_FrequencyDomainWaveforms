@@ -33,6 +33,9 @@ from FDutils import *
 
 from few.waveform import GenerateEMRIWaveform
 from few.utils.utility import get_mu_at_t, get_p_at_t
+from few.trajectory.inspiral import EMRIInspiral
+traj_module = EMRIInspiral(func="SchwarzEccFlux")
+
 from eryn.utils import TransformContainer
 from few.utils.baseclasses import SchwarzschildEccentric
 import time
@@ -107,7 +110,6 @@ def run_check(
     emri_kwargs={},
     random_modes=False,
     get_fixed_inspiral=True,
-    fixed_intrinsic=False,
     tot_numb = 50,
 ):
 
@@ -117,8 +119,8 @@ def run_check(
     # (you need to remove them from the other parts of initialization)
     fill_dict = {
        "ndim_full": 14,
-       "fill_values": np.array([0.0, 0.0, 0.0]), # spin and inclination and Phi_theta
-       "fill_inds": np.array([2, 5, 12]),
+       "fill_values": np.array([0.0, 1.0, 1.0, np.pi/3, np.pi/3, np.pi/3, np.pi/3, 0.0]), # spin and inclination and Phi_theta
+       "fill_inds":   np.array([2,   5,  6,     7,  8,   9,   10,    12]),
     }
 
     # priors
@@ -127,22 +129,17 @@ def run_check(
             {
                 0: uniform_dist(np.log(5e5), np.log(5e6)),  # M
                 1: uniform_dist(np.log(1e-6), np.log(1e-4)),  # mass ratio
-                2: uniform_dist(9.5, 15.0),  # p0
+                2: uniform_dist(7.0, 15.0),  # p0
                 3: uniform_dist(0.001, 0.7),  # e0
-                4: uniform_dist(1.0, 1.000001),  # dist in Gpc
-                5: uniform_dist(-0.99999, 0.99999),  # qS
-                6: uniform_dist(0.0, 2 * np.pi),  # phiS
-                7: uniform_dist(-0.99999, 0.99999),  # qK
-                8: uniform_dist(0.0, 2 * np.pi),  # phiK
-                9: uniform_dist(0.0, 2 * np.pi),  # Phi_phi0
-                10: uniform_dist(0.0, 2 * np.pi),  # Phi_r0
+                4: uniform_dist(0.0, 2 * np.pi),  # Phi_phi0
+                5: uniform_dist(0.0, 2 * np.pi),  # Phi_r0
             }
         ) 
     }
 
     # sampler treats periodic variables by wrapping them properly
     periodic = {
-        "emri": {6: 2 * np.pi, 8: np.pi, 9: 2 * np.pi, 10: 2 * np.pi}
+        "emri": {4: 2 * np.pi, 5: np.pi}
     }
 
     def transform_mass_ratio(logM, logeta):
@@ -153,18 +150,12 @@ def run_check(
     # on my list of things to improve
     parameter_transforms = {
         (0,1): transform_mass_ratio,
-        7: np.arccos, # qS
-        9: np.arccos,  # qK
     }
 
     transform_fn = TransformContainer(
         parameter_transforms=parameter_transforms,
         fill_dict=fill_dict,
-
     )
-
-    from few.trajectory.inspiral import EMRIInspiral
-    traj_module = EMRIInspiral(func="SchwarzEccFlux")
 
     dset = h5py.File(fp + '.h5',mode='w')
     factor = []
@@ -196,12 +187,6 @@ def run_check(
         injection_in = transform_fn.both_transforms(tmp)[0]
 
         # set initial parameters
-        if fixed_intrinsic:
-            injection_in[0] = 1e6
-            injection_in[1] = 50
-            injection_in[3] = 10.0
-            injection_in[4] = 0.4
-    
         M = injection_in[0]
         mu = injection_in[1]
         p0 = injection_in[3]
@@ -221,7 +206,7 @@ def run_check(
             check = SchwarzschildEccentric()
             check.sanity_check_init(M,mu,p0,e0)
 
-            it_speed = 5
+            it_speed = 1
             #-------------------------
             tic = time.perf_counter()
             # generate FD waveforms
@@ -305,6 +290,7 @@ def run_check(
                 logl_windowed = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs).get() for el in sig_inner_windowed])
             else:
                 logl = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs) for el in sig_inner])
+                logl_windowed = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs) for el in sig_inner_windowed])
 
             # if logl<-10.0:
             #     toplot = (sig_fd[0]-sig_td[0])[mask_non_zero]
@@ -324,7 +310,7 @@ def run_check(
             loglike.append([logl, logl_windowed])
 
         except:
-            # breakpoint()
+            breakpoint()
             failed_points.append(injection_in)
             print("not found for params",tmp[:3])
     
@@ -394,7 +380,7 @@ if __name__ == "__main__":
         dt,
         fp,
         emri_kwargs = waveform_kwargs,
-        random_modes = False,
+        random_modes = True,
         get_fixed_inspiral = bool(args['fixed_insp']),
         tot_numb = 10
     )

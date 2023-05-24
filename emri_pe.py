@@ -116,11 +116,22 @@ def run_emri_pe(
     downsample = False,
 ):
 
-    # sets the proper number of points and what not
-    
-    N_obs = int(Tobs * YRSID_SI / dt) # may need to put "- 1" here because of real transform
-    Tobs = (N_obs * dt) / YRSID_SI
-    t_arr = xp.arange(N_obs) * dt
+    (
+        M,  
+        mu,
+        a, # 2
+        p0, 
+        e0, 
+        x0, # 5
+        dist, #6
+        qS,
+        phiS,
+        qK, 
+        phiK, 
+        Phi_phi0, 
+        Phi_theta0,  # 12
+        Phi_r0
+    ) = emri_injection_params
 
     # for transforms
     # this is an example of how you would fill parameters 
@@ -128,41 +139,16 @@ def run_emri_pe(
     # (you need to remove them from the other parts of initialization)
     fill_dict = {
        "ndim_full": 14,
-       "fill_values": np.array([0.0, 0.0, 0.0]), # spin and inclination and Phi_theta
-       "fill_inds": np.array([2, 5, 12]),
+       "fill_values": np.array([0.0, x0, dist, qS, phiS, qK, phiK, Phi_theta0]), # spin and inclination and Phi_theta
+       "fill_inds":   np.array([2,   5,  6,     7,  8,   9,   10,    12]),
     }
 
-    (
-        M,  
-        mu,
-        a, 
-        p0, 
-        e0, 
-        x0,
-        dist, 
-        qS,
-        phiS,
-        qK, 
-        phiK, 
-        Phi_phi0, 
-        Phi_theta0, 
-        Phi_r0
-    ) = emri_injection_params
-
-    # get the right parameters
-    # log of large mass
+    
+    # mass ratio
     emri_injection_params[1] = np.log(emri_injection_params[1]/emri_injection_params[0])
+    # log of M mbh
     emri_injection_params[0] = np.log(emri_injection_params[0])
-    emri_injection_params[7] = np.cos(emri_injection_params[7]) 
-    emri_injection_params[8] = emri_injection_params[8] % (2 * np.pi)
-    emri_injection_params[9] = np.cos(emri_injection_params[9]) 
-    emri_injection_params[10] = emri_injection_params[10] % (2 * np.pi)
-
-    # phases
-    emri_injection_params[-1] = emri_injection_params[-1] % (2 * np.pi)
-    emri_injection_params[-2] = emri_injection_params[-2] % (2 * np.pi)
-    emri_injection_params[-3] = emri_injection_params[-3] % (2 * np.pi)
-
+    
     # remove three we are not sampling from (need to change if you go to adding spin)
     emri_injection_params_in = np.delete(emri_injection_params, fill_dict["fill_inds"])
 
@@ -172,22 +158,17 @@ def run_emri_pe(
             {
                 0: uniform_dist(np.log(5e5), np.log(5e6)),  # M
                 1: uniform_dist(np.log(1e-6), np.log(1e-4)),  # mass ratio
-                2: uniform_dist(8.0, 15.0),  # p0
+                2: uniform_dist(7.0, 15.0),  # p0
                 3: uniform_dist(0.001, 0.5),  # e0
-                4: uniform_dist(0.01, 100.0),  # dist in Gpc
-                5: uniform_dist(-0.99999, 0.99999),  # qS
-                6: uniform_dist(0.0, 2 * np.pi),  # phiS
-                7: uniform_dist(-0.99999, 0.99999),  # qK
-                8: uniform_dist(0.0, 2 * np.pi),  # phiK
-                9: uniform_dist(0.0, 2 * np.pi),  # Phi_phi0
-                10: uniform_dist(0.0, 2 * np.pi),  # Phi_r0
+                4: uniform_dist(0.0, 2 * np.pi),  # Phi_phi0
+                5: uniform_dist(0.0, 2 * np.pi),  # Phi_r0
             }
         ) 
     }
 
     # sampler treats periodic variables by wrapping them properly
     periodic = {
-        "emri": {6: 2 * np.pi, 8: np.pi, 9: 2 * np.pi, 10: 2 * np.pi}
+        "emri": {4: 2 * np.pi, 5: np.pi}
     }
 
     def transform_mass_ratio(logM, logeta):
@@ -198,8 +179,6 @@ def run_emri_pe(
     # on my list of things to improve
     parameter_transforms = {
         (0,1): transform_mass_ratio,
-        7: np.arccos, # qS
-        9: np.arccos,  # qK
     }
 
     transform_fn = TransformContainer(
@@ -309,46 +288,17 @@ def run_emri_pe(
         # params= injection_params.copy()[test_inds],
         waveform_kwargs=emri_kwargs,
         noise_fn=get_sensitivity,
-        noise_kwargs=dict(sens_fn="cornish_lisa_psd"),
+        # noise_kwargs=dict(sens_fn="cornish_lisa_psd"),
         add_noise=True,
     )
 
-    ndim = 11
+    ndim = 6
 
     # generate starting points
     factor = 1e-5
     
-    cov = np.load("covariance.npy") / (2.4 * ndim) #np.eye(ndim) * 1e-12
-
-    # start_like = np.zeros((nwalkers * ntemps))
-    
-    # iter_check = 0
-    # max_iter = 1000
-    # while (np.std(start_like) < 1.0):
-        
-    #     logp = np.full_like(start_like, -np.inf)
-    #     tmp = np.zeros((ntemps * nwalkers, ndim))
-    #     fix = np.ones((ntemps * nwalkers), dtype=bool)
-    #     while np.any(fix):
-    #         tmp[fix] = 
-            
-    #         logp = priors["emri"].logpdf(tmp)
-
-    #         fix = np.isinf(logp)
-    #         if np.all(fix):
-    #             breakpoint()
-
-    #     # like.injection_channels[:] = 0.0
-    #     start_like = like(tmp, **emri_kwargs)
-    
-    #     iter_check += 1
-    #     factor *= 1.5
-
-    #     print("std in likelihood",np.std(start_like))
-    #     print("likelihood",start_like)
-
-    #     if iter_check > max_iter:
-    #         raise ValueError("Unable to find starting parameters.")
+    cov = np.load("covariance.npy") / (2.4 * ndim)
+    cov = np.asarray([[cov[i,j] for i in [0,1,2,3,9,10]] for j in [0,1,2,3,9,10]])
 
     start_params = np.random.multivariate_normal(emri_injection_params_in, cov, size=nwalkers * ntemps)
     start_prior = priors["emri"].logpdf(start_params)
@@ -373,13 +323,14 @@ def run_emri_pe(
         out[ind_in] = update_all[ind_in]
         return out
     
+    # gibbs sampling setup
     indx_list.append(get_True_vec(np.arange(0,4)))
     indx_list.append(get_True_vec(np.arange(4,ndim)))
     gibbs_sampling =[('emri',np.asarray([indx_list[ii]])) for ii in range(len(indx_list))]
     
     # define move
     moves = [
-        StretchMove(use_gpu=use_gpu, live_dangerously=True, gibbs_sampling_setup=gibbs_sampling)
+        StretchMove(use_gpu=use_gpu, live_dangerously=True)#, gibbs_sampling_setup=gibbs_sampling)
     ]
 
     # define stopping function
@@ -395,7 +346,6 @@ def run_emri_pe(
         #     return True
         # else:
         return False
-
 
     from eryn.backends import HDFBackend
 
@@ -458,13 +408,13 @@ if __name__ == "__main__":
     e0 = args['e0'] # 0.35
     x0 = 1.0  # will be ignored in Schwarzschild waveform
     qK = np.pi/3  # polar spin angle
-    phiK = np.pi/4  # azimuthal viewing angle
+    phiK = np.pi/3  # azimuthal viewing angle
     qS = np.pi/3  # polar sky angle
-    phiS = np.pi/4  # azimuthal viewing angle
+    phiS = np.pi/3  # azimuthal viewing angle
     dist = 3.0  # distance
-    Phi_phi0 = 1.0
-    Phi_theta0 = 2.0
-    Phi_r0 = 3.0
+    Phi_phi0 = np.pi/3
+    Phi_theta0 = 0.0
+    Phi_r0 = np.pi/3
 
     Tobs = args['Tobs'] # 1.00
     dt = args['dt'] # 1.0 # 4 Hz is the baseline 
