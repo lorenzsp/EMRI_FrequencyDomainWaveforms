@@ -230,15 +230,15 @@ def run_check(
             toc = time.perf_counter()
             fd_time = (toc-tic)/it_speed
 
-            # downsampled
-            kw_downsampled = emri_kwargs.copy()
-            kw_downsampled['f_arr'] = xp.fft.fftshift(xp.fft.fftfreq(1001, dt))
-            tic = time.perf_counter()
-            # generate FD waveforms
-            [few_gen(*injection_in, **kw_downsampled) for _ in range(it_speed)]
-            # transform into hp and hc
-            toc = time.perf_counter()
-            fd_time_downsampled = (toc-tic)/it_speed
+            # # downsampled
+            # kw_downsampled = emri_kwargs.copy()
+            # kw_downsampled['f_arr'] = xp.fft.fftshift(xp.fft.fftfreq(1001, dt))
+            # tic = time.perf_counter()
+            # # generate FD waveforms
+            # [few_gen(*injection_in, **kw_downsampled) for _ in range(it_speed)]
+            # # transform into hp and hc
+            # toc = time.perf_counter()
+            fd_time_downsampled = 0.0#(toc-tic)/it_speed
 
             data_channels_fd = few_gen(*injection_in, **emri_kwargs)
             #-------------------------
@@ -270,7 +270,7 @@ def run_check(
 
             # store timing
             timing_td.append(td_time)
-            timing_fd.append(fd_time)
+            timing_fd.append([fd_time, fd_time_downsampled])
             list_injections.append(injection_in)
             print("TD/FD time",td_time/fd_time, "TD", td_time, "FD", fd_time, "FD downsampled", fd_time_downsampled )
             factor.append(td_time/fd_time)
@@ -396,5 +396,5 @@ if __name__ == "__main__":
         emri_kwargs = waveform_kwargs,
         random_modes = False,
         get_fixed_inspiral = bool(args['fixed_insp']),
-        tot_numb = 100
+        tot_numb = 10
     )
