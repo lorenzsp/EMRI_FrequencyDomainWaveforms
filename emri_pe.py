@@ -479,5 +479,6 @@ if __name__ == "__main__":
         nwalkers,
         emri_kwargs=waveform_kwargs,
         template=template,
-        downsample=downsample
+        downsample=downsample,
+        injectFD=injectFD
     )
