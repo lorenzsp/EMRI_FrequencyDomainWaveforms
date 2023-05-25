@@ -45,7 +45,7 @@ from few.utils.utility import omp_set_num_threads
 import time
 
 import h5py
-from scipy.signal.windows import tukey, hann
+from scipy.signal.windows import blackman, blackmanharris, hamming, hann, nuttall, parzen
 
 import matplotlib.pyplot as plt
 from few.utils.constants import *
@@ -130,7 +130,7 @@ def run_check(
     priors = {
         "emri": ProbDistContainer(
             {
-                0: uniform_dist(np.log(5e6), np.log(1e7)),  # M
+                0: uniform_dist(np.log(1e5), np.log(1e7)),  # M
                 1: uniform_dist(np.log(1e-6), np.log(1e-4)),  # mass ratio
                 2: uniform_dist(10.0, 16.0),  # p0
                 3: uniform_dist(0.001, 0.7),  # e0
@@ -223,7 +223,7 @@ def run_check(
             check = SchwarzschildEccentric()
             check.sanity_check_init(M,mu,p0,e0)
 
-            it_speed = 2
+            it_speed = 3
             #-------------------------
             tic = time.perf_counter()
             # generate FD waveforms
@@ -269,10 +269,12 @@ def run_check(
             sig_td = get_fft_td_windowed(signal_in_td, 1.0, dt)
             
             # windowed verions
-            window = xp.asarray(tukey(len(data_channels_td), alpha=0.1))
+            # window = xp.asarray(tukey(len(data_channels_td), alpha=0.1))
             # window = xp.asarray(hann(len(data_channels_td)))
-            sig_fd_windowed = [el[positive_frequency_mask] for el in get_fd_windowed(sig_fd, window)]
-            sig_td_windowed = [el[positive_frequency_mask] for el in get_fft_td_windowed(signal_in_td, window, dt)]
+            sig_fd_windowed = [[el[positive_frequency_mask] for el in get_fd_windowed(sig_fd, xp.asarray(ww(len(data_channels_td))) )] 
+                                for ww in [blackman, blackmanharris, hamming, hann, nuttall, parzen]]
+            sig_td_windowed = [[el[positive_frequency_mask] for el in get_fft_td_windowed(signal_in_td, xp.asarray(ww(len(data_channels_td))), dt)]
+                                for ww in [blackman, blackmanharris, hamming, hann, nuttall, parzen]]
 
             # store timing
             timing_td.append(td_time)
@@ -288,27 +290,30 @@ def run_check(
             sig_td = [el[positive_frequency_mask] for el in sig_td]
 
             # get SNR
-            SNR = [np.sqrt(float(inner_product(el, el, **fd_inner_product_kwargs))) for el in [sig_fd, sig_fd_windowed] ]
+            SNR = [np.sqrt(float(inner_product(el, el, **fd_inner_product_kwargs))) for el in [sig_fd]+sig_fd_windowed]
             print('SNR', SNR)
             SNR_list.append(SNR)
             # norm = 20.0/SNR
 
             # mismatch 
-            Mism = xp.abs(1-inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs))
-            Mism_wind = xp.abs(1-inner_product(sig_fd_windowed, sig_td_windowed, normalize=True, **fd_inner_product_kwargs))
+            Mism = xp.abs(1-inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs)).get() 
+            Mism_wind = [xp.abs(1-inner_product(el_fd, el_td, normalize=True, **fd_inner_product_kwargs)).get() 
+                        for el_fd, el_td in zip(sig_fd_windowed, sig_td_windowed)]
+
             print("mismatch", Mism, Mism_wind)
 
             if use_gpu:
-                mismatch.append([Mism.get(), Mism_wind.get()])
+                mismatch.append([Mism]+Mism_wind)
             else:
                 mismatch.append([Mism, Mism_wind])
             
             # loglike
             sig_inner = [sig_fd[0]-sig_td[0],sig_fd[1]-sig_td[1]]
-            sig_inner_windowed = [sig_fd_windowed[0]-sig_td_windowed[0],sig_fd_windowed[1]-sig_td_windowed[1]]
             if use_gpu:
                 logl = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs).get() for el in sig_inner])
-                logl_windowed = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs).get() for el in sig_inner_windowed])
+                logl_windowed = [-0.5 * sum([inner_product([el_fd[0]-el_td[0]], [el_fd[0]-el_td[0]], normalize=False, **fd_inner_product_kwargs).get()+
+                                            inner_product([el_fd[1]-el_td[1]], [el_fd[1]-el_td[1]], normalize=False, **fd_inner_product_kwargs).get()])
+                                for el_fd, el_td in zip(sig_fd_windowed, sig_td_windowed)]
             else:
                 logl = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs) for el in sig_inner])
                 logl_windowed = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs) for el in sig_inner_windowed])
@@ -328,7 +333,7 @@ def run_check(
             #         plt.figure(); plt.loglog(ff, xp.abs(toplot)**2 ); plt.savefig(f'high_mism/logl{logl}.png')
 
             print("logl ", logl, logl_windowed)
-            loglike.append([logl, logl_windowed])
+            loglike.append([logl] + logl_windowed)
 
         except:
             # breakpoint()
@@ -393,8 +398,8 @@ if __name__ == "__main__":
         "dt": dt,
         "eps": eps,
     }
-    tot_numb = 10000
-    fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}"
+    tot_numb = 50000
+    fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}_newprior"
 
     run_check(
         Tobs,
