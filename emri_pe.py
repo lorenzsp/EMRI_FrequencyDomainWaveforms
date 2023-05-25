@@ -44,7 +44,7 @@ from few.trajectory.inspiral import EMRIInspiral
 
 from eryn.utils import TransformContainer
 from few.utils.utility import omp_set_num_threads
-omp_set_num_threads(16)
+omp_set_num_threads(1)
 
 import time
 import matplotlib.pyplot as plt
@@ -278,7 +278,7 @@ def run_emri_pe(
         parameter_transforms={"emri": transform_fn},
         vectorized=False,
         transpose_params=False,
-        subset= nwalkers * ntemps,  # may need this subset
+        subset= 24,  # may need this subset
         f_arr = f_arr,
         use_gpu=use_gpu
     )
