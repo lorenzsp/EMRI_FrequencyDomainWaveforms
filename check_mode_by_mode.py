@@ -139,6 +139,11 @@ def run_check(
             }
         ) 
     }
+    # Mvec = np.linspace(np.log(1e5), np.log(1e7),num=5)
+    # massratio = np.linspace(np.log(1e-6), np.log(1e-4),num=5)
+    # ecc_vec = np.linspace(0.001, 0.7,num=5)
+    # list_par = [[logM, logeta, 12.0, ecc] for logM in Mvec for logeta in massratio for ecc in ecc_vec]
+    # breakpoint()
 
     # sampler treats periodic variables by wrapping them properly
     periodic = {
@@ -223,7 +228,7 @@ def run_check(
             check = SchwarzschildEccentric()
             check.sanity_check_init(M,mu,p0,e0)
 
-            it_speed = 3
+            it_speed = 1
             #-------------------------
             tic = time.perf_counter()
             # generate FD waveforms
@@ -272,9 +277,9 @@ def run_check(
             # window = xp.asarray(tukey(len(data_channels_td), alpha=0.1))
             # window = xp.asarray(hann(len(data_channels_td)))
             sig_fd_windowed = [[el[positive_frequency_mask] for el in get_fd_windowed(sig_fd, xp.asarray(ww(len(data_channels_td))) )] 
-                                for ww in [blackman, blackmanharris, hamming, hann, nuttall, parzen]]
+                                for ww in [blackman, hann, nuttall]]
             sig_td_windowed = [[el[positive_frequency_mask] for el in get_fft_td_windowed(signal_in_td, xp.asarray(ww(len(data_channels_td))), dt)]
-                                for ww in [blackman, blackmanharris, hamming, hann, nuttall, parzen]]
+                                for ww in [blackman, hann, nuttall]]
 
             # store timing
             timing_td.append(td_time)
@@ -398,7 +403,7 @@ if __name__ == "__main__":
         "dt": dt,
         "eps": eps,
     }
-    tot_numb = 50000
+    tot_numb = 10000
     fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}_newprior"
 
     run_check(
