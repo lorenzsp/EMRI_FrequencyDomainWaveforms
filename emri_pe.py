@@ -156,7 +156,7 @@ def run_emri_pe(
     priors = {
         "emri": ProbDistContainer(
             {
-                0: uniform_dist(np.log(5e5), np.log(5e6)),  # M
+                0: uniform_dist(np.log(5e5), np.log(1e7)),  # M
                 1: uniform_dist(np.log(1e-6), np.log(1e-4)),  # mass ratio
                 2: uniform_dist(10.0, 15.0),  # p0
                 3: uniform_dist(0.001, 0.7),  # e0
@@ -330,7 +330,7 @@ def run_emri_pe(
     
     # define move
     moves = [
-        StretchMove(use_gpu=use_gpu, live_dangerously=True)#, gibbs_sampling_setup=gibbs_sampling)
+        StretchMove(use_gpu=use_gpu, live_dangerously=True, gibbs_sampling_setup=gibbs_sampling)
     ]
 
     # define stopping function
