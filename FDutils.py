@@ -27,18 +27,50 @@ def get_fd_windowed(signal, window):
     return [transf_fd_0, transf_fd_1]
 
 
-# conversion
-class get_fd_waveform_fromTD():
 
-    def __init__(self, waveform_generator, positive_frequency_mask, dt):
+class get_fd_waveform_fromFD():
+
+    def __init__(self, waveform_generator, positive_frequency_mask, dt, non_zero_mask=None, window=None):
         self.waveform_generator = waveform_generator
         self.positive_frequency_mask = positive_frequency_mask
         self.dt = dt
+        self.non_zero_mask = non_zero_mask
+        if window is None:
+            window = 1.0
+        else:
+            self.window = window
 
     def __call__(self,*args, **kwargs):
         data_channels_td = self.waveform_generator(*args, **kwargs)
-        fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(data_channels_td[0]))[self.positive_frequency_mask] * self.dt
-        fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(data_channels_td[1]))[self.positive_frequency_mask] * self.dt
+        list_p_c = get_fd_windowed(data_channels_td, self.window)
+        fft_td_wave_p = list_p_c[0][self.positive_frequency_mask]
+        fft_td_wave_c = list_p_c[1][self.positive_frequency_mask]
+        if self.non_zero_mask is not None:
+            fft_td_wave_p[~self.non_zero_mask] = complex(0.0)
+            fft_td_wave_c[~self.non_zero_mask] = complex(0.0)
+        return [fft_td_wave_p,fft_td_wave_c]
+
+# conversion
+class get_fd_waveform_fromTD():
+
+    def __init__(self, waveform_generator, positive_frequency_mask, dt, non_zero_mask=None, window=None):
+        self.waveform_generator = waveform_generator
+        self.positive_frequency_mask = positive_frequency_mask
+        self.dt = dt
+        self.non_zero_mask = non_zero_mask
+        if window is None:
+            window = 1.0
+        else:
+            self.window = window
+
+    def __call__(self,*args, **kwargs):
+        data_channels_td = self.waveform_generator(*args, **kwargs)
+        list_p_c = get_fft_td_windowed(data_channels_td, self.window, self.dt)
+        fft_td_wave_p = list_p_c[0][self.positive_frequency_mask]
+        fft_td_wave_c = list_p_c[1][self.positive_frequency_mask]
+        if self.non_zero_mask is not None:
+            fft_td_wave_p[~self.non_zero_mask] = complex(0.0)
+            fft_td_wave_c[~self.non_zero_mask] = complex(0.0)
         return [fft_td_wave_p,fft_td_wave_c]
 
 def get_colorplot(data, color_value, label):

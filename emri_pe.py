@@ -31,12 +31,13 @@ from eryn.prior import ProbDistContainer, uniform_dist
 import corner
 from lisatools.utils.utility import AET
 
-from eryn.moves import StretchMove
+from eryn.moves import StretchMove, GaussianMove
 from lisatools.sampling.likelihood import Likelihood
 from lisatools.diagnostic import *
 
 # from lisatools.sensitivity import get_sensitivity
 from FDutils import *
+from scipy.signal.windows import blackman, blackmanharris, hamming, hann, nuttall, parzen
 
 from few.waveform import GenerateEMRIWaveform
 from few.utils.utility import get_p_at_t
@@ -202,7 +203,10 @@ def run_emri_pe(
     # transform into hp and hc
     emri_kwargs['mask_positive']=True
     sig_fd = few_gen_list(*injection_in, **emri_kwargs)
-    
+    del emri_kwargs['mask_positive']
+    # non zero frequencies
+    non_zero_mask = (xp.abs(sig_fd[0])>1e-50)
+
     # generate TD waveform, this will return a list with hp and hc
     data_channels_td = td_gen_list(*injection_in, **emri_kwargs)
     tic = time.perf_counter()
@@ -210,17 +214,17 @@ def run_emri_pe(
     toc = time.perf_counter()
     fd_time = toc-tic
     print('td time', fd_time/10)
-    # fft from negative to positive frequencies
-    fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(data_channels_td[1])) * dt
-    fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(data_channels_td[0])) * dt
-    # consider only positive frequencies
-    fft_td_gen = get_fd_waveform_fromTD(td_gen_list, positive_frequency_mask, dt)
-    print('check TD transform', xp.all(fft_td_gen(*injection_in, **emri_kwargs)[0] == fft_td_wave_p[positive_frequency_mask]) )
-    sig_td = [fft_td_wave_p[positive_frequency_mask],fft_td_wave_c[positive_frequency_mask] ]
+    # windowing signals
+    window = xp.asarray(hann(len(data_channels_td[0])))
+    fft_td_gen = get_fd_waveform_fromTD(td_gen_list, positive_frequency_mask, dt, window=window)
+    fd_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)
+    # injections
+    sig_fd = fd_gen(*injection_in, **emri_kwargs)
+    sig_td = fft_td_gen(*injection_in, **emri_kwargs)
 
     # kwargs for computing inner products
     print('shape', sig_td[0].shape, sig_fd[0].shape )
-    fd_inner_product_kwargs = dict( PSD="cornish_lisa_psd", use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
+    fd_inner_product_kwargs = dict( PSD=xp.asarray(get_sensitivity(frequency[positive_frequency_mask].get())), use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
 
     print("Overlap total and partial ", inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs),
     inner_product(sig_fd[0], sig_td[0], normalize=True, **fd_inner_product_kwargs),
@@ -232,10 +236,13 @@ def run_emri_pe(
     check_snr = snr(sig_fd, **fd_inner_product_kwargs)
     print("SNR = ", check_snr)
 
+    def get_wave(*args, **kwargs):
+        return get_fd_windowed(like_gen(*args, **kwargs), window)
+
     # this is a parent likelihood class that manages the parameter transforms
     nchannels = 2
     if template=='fd':
-        like_gen = few_gen_list
+        like_gen = fd_gen
     elif template=='td':
         like_gen = fft_td_gen
     
@@ -244,6 +251,7 @@ def run_emri_pe(
         data_stream = sig_fd
     else:
         data_stream = sig_td
+    plt.figure(); plt.loglog(np.abs(data_stream[0].get())**2); plt.savefig(fp[:-3]+'injection.pdf')
 
     if downsample:
         # list the indeces 
@@ -289,22 +297,21 @@ def run_emri_pe(
         waveform_kwargs=emri_kwargs,
         noise_fn=get_sensitivity,
         # noise_kwargs=dict(sens_fn="cornish_lisa_psd"),
-        add_noise=True,
+        add_noise=False,
     )
 
     ndim = 6
 
     # generate starting points
     factor = 1e-5
-    
-    cov = np.load("covariance.npy") / (2.4 * ndim)
-    cov = np.asarray([[cov[i,j] for i in [0,1,2,3,9,10]] for j in [0,1,2,3,9,10]])
+    cov = np.cov(np.load("covariance.npy"),rowvar=False) / (2.4 * ndim)
 
     start_params = np.random.multivariate_normal(emri_injection_params_in, cov, size=nwalkers * ntemps)
     start_prior = priors["emri"].logpdf(start_params)
     start_like = like(start_params, **emri_kwargs)
     start_params[np.isnan(start_like)] = np.random.multivariate_normal(emri_injection_params_in, cov, size=start_params[np.isnan(start_like)].size)
     print("likelihood",start_like)
+    print("likelihood injection",like(emri_injection_params_in[:,None].T , **emri_kwargs))
 
     # start state
     start_state = State(
@@ -330,17 +337,20 @@ def run_emri_pe(
     
     # define move
     moves = [
-        StretchMove(use_gpu=use_gpu, live_dangerously=True, gibbs_sampling_setup=gibbs_sampling)
+        # GaussianMove({"emri": cov}, factor=1000, gibbs_sampling_setup=gibbs_sampling)
+        StretchMove(use_gpu=use_gpu)#, live_dangerously=True, gibbs_sampling_setup=gibbs_sampling)
     ]
 
     # define stopping function
     start = time.time()
     def get_time(i, res, samp):
 
-        if (i%20==0):
+        if (i%50==0):
             print("acceptance ratio",samp.acceptance_fraction)
-            # print("last sample",samp.get_chain()['gwb'][-1,0,:,0,-7:])
             print("max last loglike",np.max(samp.get_log_like()[-1]))
+            # if (i>100)and(i<1000):
+            #     emrisamp = samp.get_chain()['emri'][-100:,0][samp.get_inds()['emri'][-100:,0]]
+            #     samp.moves[0].all_proposal['emri'].scale = np.cov(emrisamp,rowvar=False)
 
         # if time.time()-start > 23.0*3600:
         #     return True
@@ -430,7 +440,7 @@ if __name__ == "__main__":
 
     p0 = get_p_at_t(
     traj,
-    Tobs * 0.9,
+    Tobs * 0.99,
     [M, mu, 0.0, e0, 1.0],
     index_of_p=3,
     index_of_a=2,
@@ -444,7 +454,7 @@ if __name__ == "__main__":
     print("new p0 ", p0)
 
     
-    fp = f"results/MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + ".h5"
+    fp = f"results/newMCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + ".h5"
 
     emri_injection_params = np.array([
         M,  

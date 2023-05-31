@@ -289,7 +289,7 @@ def run_check(
             factor.append(td_time/fd_time)
 
             # kwargs for computing inner products
-            fd_inner_product_kwargs = dict( PSD="cornish_lisa_psd", use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
+            fd_inner_product_kwargs = dict( PSD=xp.asarray(get_sensitivity(frequency[positive_frequency_mask].get())), use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
 
             sig_fd = [el[positive_frequency_mask] for el in sig_fd]
             sig_td = [el[positive_frequency_mask] for el in sig_td]
@@ -404,7 +404,7 @@ if __name__ == "__main__":
         "eps": eps,
     }
     tot_numb = 10000
-    fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}_newprior"
+    fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}_newsens"
 
     run_check(
         Tobs,
