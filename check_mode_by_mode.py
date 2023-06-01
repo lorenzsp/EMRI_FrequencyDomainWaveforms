@@ -289,7 +289,10 @@ def run_check(
             factor.append(td_time/fd_time)
 
             # kwargs for computing inner products
-            fd_inner_product_kwargs = dict( PSD=xp.asarray(get_sensitivity(frequency[positive_frequency_mask].get())), use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
+            if use_gpu:
+                fd_inner_product_kwargs = dict( PSD=xp.asarray(get_sensitivity(frequency[positive_frequency_mask].get())), use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
+            else:
+                fd_inner_product_kwargs = dict( PSD=xp.asarray(get_sensitivity(frequency[positive_frequency_mask])), use_gpu=use_gpu, f_arr=frequency[positive_frequency_mask])
 
             sig_fd = [el[positive_frequency_mask] for el in sig_fd]
             sig_td = [el[positive_frequency_mask] for el in sig_td]
@@ -300,18 +303,19 @@ def run_check(
             SNR_list.append(SNR)
             # norm = 20.0/SNR
 
-            # mismatch 
-            Mism = xp.abs(1-inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs)).get() 
-            Mism_wind = [xp.abs(1-inner_product(el_fd, el_td, normalize=True, **fd_inner_product_kwargs)).get() 
-                        for el_fd, el_td in zip(sig_fd_windowed, sig_td_windowed)]
-
-            print("mismatch", Mism, Mism_wind)
-
             if use_gpu:
-                mismatch.append([Mism]+Mism_wind)
+                # mismatch 
+                Mism = xp.abs(1-inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs)).get() 
+                Mism_wind = [xp.abs(1-inner_product(el_fd, el_td, normalize=True, **fd_inner_product_kwargs)).get() 
+                            for el_fd, el_td in zip(sig_fd_windowed, sig_td_windowed)]    
             else:
-                mismatch.append([Mism, Mism_wind])
-            
+                # mismatch 
+                Mism = xp.abs(1-inner_product(sig_fd, sig_td, normalize=True, **fd_inner_product_kwargs))
+                Mism_wind = [xp.abs(1-inner_product(el_fd, el_td, normalize=True, **fd_inner_product_kwargs))
+                            for el_fd, el_td in zip(sig_fd_windowed, sig_td_windowed)]
+
+            mismatch.append([Mism]+Mism_wind)
+            print("mismatch", Mism, Mism_wind)
             # loglike
             sig_inner = [sig_fd[0]-sig_td[0],sig_fd[1]-sig_td[1]]
             if use_gpu:
@@ -321,7 +325,9 @@ def run_check(
                                 for el_fd, el_td in zip(sig_fd_windowed, sig_td_windowed)]
             else:
                 logl = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs) for el in sig_inner])
-                logl_windowed = -0.5 * sum([inner_product(el, el, normalize=False, **fd_inner_product_kwargs) for el in sig_inner_windowed])
+                logl_windowed = [-0.5 * sum([inner_product([el_fd[0]-el_td[0]], [el_fd[0]-el_td[0]], normalize=False, **fd_inner_product_kwargs)+
+                                            inner_product([el_fd[1]-el_td[1]], [el_fd[1]-el_td[1]], normalize=False, **fd_inner_product_kwargs)])
+                                for el_fd, el_td in zip(sig_fd_windowed, sig_td_windowed)]
 
             # if logl<-10.0:
             #     toplot = (sig_fd[0]-sig_td[0])[mask_non_zero]
@@ -341,7 +347,6 @@ def run_check(
             loglike.append([logl] + logl_windowed)
 
         except:
-            # breakpoint()
             failed_points.append(injection_in)
             print("not found for params",tmp[:3])
     
@@ -403,7 +408,7 @@ if __name__ == "__main__":
         "dt": dt,
         "eps": eps,
     }
-    tot_numb = 10000
+    tot_numb = 1000
     fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}_newsens"
 
     run_check(
