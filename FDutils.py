@@ -80,7 +80,34 @@ def get_colorplot(data, color_value, label):
     figure, axes = plt.subplots(n_dimensions-1, n_dimensions-1, figsize=(10, 10))
 
     # Custom color map
-    cmap = plt.cm.get_cmap('viridis')  # Choose a color map of your preference
+    cmap = plt.cm.get_cmap('cool')  # Choose a color map of your preference
+
+def get_colorplot(data, color_value, label):
+    colors = color_value
+    n_dimensions = data.shape[-1]
+    # Plot the corner plot
+    figure, axes = plt.subplots(n_dimensions-1, n_dimensions-1, figsize=(10, 10))
+
+    # Custom color map
+    cmap = plt.cm.get_cmap('cool')  # Choose a color map of your preference
+
+def get_colorplot(data, color_value, label):
+    colors = color_value
+    n_dimensions = data.shape[-1]
+    # Plot the corner plot
+    figure, axes = plt.subplots(n_dimensions-1, n_dimensions-1, figsize=(10, 10))
+
+    # Custom color map
+    cmap = plt.cm.get_cmap('cool')  # Choose a color map of your preference
+
+def get_colorplot(data, color_value, label):
+    colors = color_value
+    n_dimensions = data.shape[-1]
+    # Plot the corner plot
+    figure, axes = plt.subplots(n_dimensions-1, n_dimensions-1, figsize=(10, 10))
+
+    # Custom color map
+    cmap = plt.cm.get_cmap('cool')  # Choose a color map of your preference
 
     for i in range(n_dimensions-1):
         for j in range(n_dimensions-1):
