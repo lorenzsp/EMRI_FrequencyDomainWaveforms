@@ -5,41 +5,6 @@
 # nohup python check_mode_by_mode.py -Tobs 4.0 -dev 4 -eps 1e-5 -dt 10.0 > outcheck3.out &
 
 
-# Define an array of values for Tobs, eps, and dt
-#!/bin/bash
-
-
-# Iterate over the values
-Tobs=4
-eps=1e-5
-dt=5.0
-output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
-nohup python check_mode_by_mode.py -Tobs $Tobs -dev 0 -eps $eps -dt $dt > "$output_file" &
-
-# Tobs=4
-# eps=1e-5
-# dt=5.0
-# output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}_fixed_insp0.out"
-# nohup python check_mode_by_mode.py -Tobs $Tobs -dev 2 -eps $eps -dt $dt -fixed_insp 0 > "$output_file" &
-
-Tobs=4
-eps=1e-5
-dt=10.0
-output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
-nohup python check_mode_by_mode.py -Tobs $Tobs -dev 4 -eps $eps -dt $dt > "$output_file" &
-
-Tobs=4
-eps=1e-2
-dt=5.0
-output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
-nohup python check_mode_by_mode.py -Tobs $Tobs -dev 5 -eps $eps -dt $dt > "$output_file" &
-
-Tobs=2
-eps=1e-5
-dt=5.0
-output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
-nohup python check_mode_by_mode.py -Tobs $Tobs -dev 2 -eps $eps -dt $dt > "$output_file" &
-
 # # Define an array of values for Tobs, eps, and dt
 # Tobs_values=(4)
 # eps_values=(1e-2)
@@ -56,3 +21,28 @@ nohup python check_mode_by_mode.py -Tobs $Tobs -dev 2 -eps $eps -dt $dt > "$outp
 #   done
 # done
 
+
+# Iterate over the values
+Tobs=4
+eps=1e-5
+dt=5.0
+output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
+nohup python check_mode_by_mode.py -Tobs $Tobs -dev 0 -eps $eps -dt $dt > "$output_file" &
+
+Tobs=4
+eps=1e-5
+dt=10.0
+output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
+nohup python check_mode_by_mode.py -Tobs $Tobs -dev 5 -eps $eps -dt $dt > "$output_file" &
+
+Tobs=4
+eps=1e-2
+dt=5.0
+output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
+nohup python check_mode_by_mode.py -Tobs $Tobs -dev 7 -eps $eps -dt $dt > "$output_file" &
+
+# Tobs=2
+# eps=1e-5
+# dt=5.0
+# output_file="outcheck_Tobs${Tobs}_eps${eps}_dt${dt}.out"
+# nohup python check_mode_by_mode.py -Tobs $Tobs -dev 2 -eps $eps -dt $dt > "$output_file" &

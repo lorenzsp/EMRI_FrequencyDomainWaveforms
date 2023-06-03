@@ -408,8 +408,8 @@ if __name__ == "__main__":
         "dt": dt,
         "eps": eps,
     }
-    tot_numb = 1000
-    fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}_newsens"
+    tot_numb = 10000
+    fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}_final"
 
     run_check(
         Tobs,

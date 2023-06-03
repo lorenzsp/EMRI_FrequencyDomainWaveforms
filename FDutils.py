@@ -6,7 +6,9 @@ Sh_X = CubicSpline(S_git[:,0], S_git[:,1])
 
 try:
     import cupy as xp
+    from cupyx.scipy.signal import convolve
 except:
+    from scipy.signal import convolve
     import numpy as xp
 
 # ff = 10**np.linspace(-5.0, 1.0,num=100)
@@ -16,6 +18,10 @@ except:
 def get_sensitivity(f):
     return Sh_X(f)
 
+def get_convolution(a,b):
+    return convolve(xp.hstack((a[1:], a)), b, 'valid')
+# get_convolution(xp.fft.ifftshift(signal[0]) ,xp.fft.fft(window))
+
 def get_fft_td_windowed(signal, window, dt):
     fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(signal[0] * window )) * dt
     fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(signal[1] * window )) * dt
@@ -24,6 +30,7 @@ def get_fft_td_windowed(signal, window, dt):
 def get_fd_windowed(signal, window):
     transf_fd_0 = xp.fft.fftshift(xp.fft.fft(xp.fft.ifft( xp.fft.ifftshift( signal[0] ) ) * window))
     transf_fd_1 = xp.fft.fftshift(xp.fft.fft(xp.fft.ifft( xp.fft.ifftshift( signal[1] ) ) * window))
+
     return [transf_fd_0, transf_fd_1]
 
 
@@ -72,33 +79,6 @@ class get_fd_waveform_fromTD():
             fft_td_wave_p[~self.non_zero_mask] = complex(0.0)
             fft_td_wave_c[~self.non_zero_mask] = complex(0.0)
         return [fft_td_wave_p,fft_td_wave_c]
-
-def get_colorplot(data, color_value, label):
-    colors = color_value
-    n_dimensions = data.shape[-1]
-    # Plot the corner plot
-    figure, axes = plt.subplots(n_dimensions-1, n_dimensions-1, figsize=(10, 10))
-
-    # Custom color map
-    cmap = plt.cm.get_cmap('cool')  # Choose a color map of your preference
-
-def get_colorplot(data, color_value, label):
-    colors = color_value
-    n_dimensions = data.shape[-1]
-    # Plot the corner plot
-    figure, axes = plt.subplots(n_dimensions-1, n_dimensions-1, figsize=(10, 10))
-
-    # Custom color map
-    cmap = plt.cm.get_cmap('cool')  # Choose a color map of your preference
-
-def get_colorplot(data, color_value, label):
-    colors = color_value
-    n_dimensions = data.shape[-1]
-    # Plot the corner plot
-    figure, axes = plt.subplots(n_dimensions-1, n_dimensions-1, figsize=(10, 10))
-
-    # Custom color map
-    cmap = plt.cm.get_cmap('cool')  # Choose a color map of your preference
 
 def get_colorplot(data, color_value, label):
     colors = color_value
