@@ -438,7 +438,7 @@ if __name__ == "__main__":
 
     p0 = get_p_at_t(
     traj,
-    Tobs * 0.9,
+    Tobs * 0.99,
     [M, mu, 0.0, e0, 1.0],
     index_of_p=3,
     index_of_a=2,

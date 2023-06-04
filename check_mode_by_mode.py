@@ -280,6 +280,7 @@ def run_check(
                                 for ww in [blackman, hann, nuttall]]
             sig_td_windowed = [[el[positive_frequency_mask] for el in get_fft_td_windowed(signal_in_td, xp.asarray(ww(len(data_channels_td))), dt)]
                                 for ww in [blackman, hann, nuttall]]
+            
 
             # store timing
             timing_td.append(td_time)
@@ -316,6 +317,8 @@ def run_check(
 
             mismatch.append([Mism]+Mism_wind)
             print("mismatch", Mism, Mism_wind)
+            
+            
             # loglike
             sig_inner = [sig_fd[0]-sig_td[0],sig_fd[1]-sig_td[1]]
             if use_gpu:
@@ -329,24 +332,11 @@ def run_check(
                                             inner_product([el_fd[1]-el_td[1]], [el_fd[1]-el_td[1]], normalize=False, **fd_inner_product_kwargs)])
                                 for el_fd, el_td in zip(sig_fd_windowed, sig_td_windowed)]
 
-            # if logl<-10.0:
-            #     toplot = (sig_fd[0]-sig_td[0])[mask_non_zero]
-            #     ff = frequency[positive_frequency_mask][mask_non_zero]
-            #     if random_modes:
-            #         mode = emri_kwargs['mode_selection'][0]
-            #     else:
-            #         mode = emri_kwargs['eps']
-
-            #     if use_gpu:
-            #         plt.figure(); plt.title(f'mismatch = {Mism}'); plt.loglog(ff.get(), xp.abs(toplot).get()**2 ); plt.savefig(f'high_mism/logl{logl}_{mode}_{M, mu, p0, e0}.png')
-            #         plt.figure(); plt.loglog(ff.get(), xp.abs(sig_fd[0][mask_non_zero]).get()**2 ,label='FD'); plt.loglog(ff.get(), xp.abs(sig_td[0][mask_non_zero]).get()**2 ,'--',label='TD'); plt.legend(); plt.savefig(f'high_mism/mism{Mism}_{mode}_{M, mu, p0, e0}.png')
-            #     else:
-            #         plt.figure(); plt.loglog(ff, xp.abs(toplot)**2 ); plt.savefig(f'high_mism/logl{logl}.png')
-
             print("logl ", logl, logl_windowed)
             loglike.append([logl] + logl_windowed)
 
         except:
+            breakpoint()
             failed_points.append(injection_in)
             print("not found for params",tmp[:3])
     
