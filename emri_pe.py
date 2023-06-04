@@ -261,6 +261,10 @@ def run_emri_pe(
         plt.figure(); plt.loglog(np.abs(data_stream[0])**2); plt.savefig(fp[:-3]+'injection.pdf')
 
     if downsample:
+        if template=='td':
+            raise ValueError('Cannot run downsampling with time domain template')
+        else:
+            print('Running with downsampling, injecing consistently the FD signal')
         # list the indeces 
         lst_ind = list(range(len(frequency)))
         upp = 10000
@@ -284,7 +288,7 @@ def run_emri_pe(
         like_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)
         fd_inner_product_kwargs_downsamp = dict( PSD=xp.asarray(get_sensitivity(f_arr)), use_gpu=use_gpu, f_arr=f_arr)
         # downsample data stream
-        data_stream = [el[0::ii] for el in data_stream]
+        data_stream = like_gen(*injection_in, **emri_kwargs)
 
     else:
         if use_gpu:
@@ -345,6 +349,7 @@ def run_emri_pe(
     start_params[np.isnan(start_like)] = np.random.multivariate_normal(emri_injection_params_in, cov, size=start_params[np.isnan(start_like)].size)
     print("likelihood",start_like)
     print("likelihood injection",like(emri_injection_params_in[:,None].T , **emri_kwargs))
+    breakpoint()
 
     # start state
     start_state = State(
@@ -526,7 +531,7 @@ if __name__ == "__main__":
     print("new p0 ", p0)
 
     
-    fp = f"results/MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + "_final.h5"
+    fp = f"./test_MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + "_final.h5"
 
     emri_injection_params = np.array([
         M,  

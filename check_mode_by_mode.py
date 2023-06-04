@@ -139,11 +139,6 @@ def run_check(
             }
         ) 
     }
-    # Mvec = np.linspace(np.log(1e5), np.log(1e7),num=5)
-    # massratio = np.linspace(np.log(1e-6), np.log(1e-4),num=5)
-    # ecc_vec = np.linspace(0.001, 0.7,num=5)
-    # list_par = [[logM, logeta, 12.0, ecc] for logM in Mvec for logeta in massratio for ecc in ecc_vec]
-    # breakpoint()
 
     # sampler treats periodic variables by wrapping them properly
     periodic = {
@@ -336,7 +331,6 @@ def run_check(
             loglike.append([logl] + logl_windowed)
 
         except:
-            breakpoint()
             failed_points.append(injection_in)
             print("not found for params",tmp[:3])
     

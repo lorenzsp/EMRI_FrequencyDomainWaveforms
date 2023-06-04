@@ -13,17 +13,17 @@ nwalkers=128
 ntemps=1
 downsample=0
 
-dev=2
-injectFD=0
-template="fd"
-nohup python emri_pe.py -Tobs $Tobs -M $M -mu $mu -p0 $p0 -e0 $e0 -dev $dev -eps $eps -dt $dt -injectFD $injectFD -template $template -nwalkers $nwalkers -ntemps $ntemps -downsample $downsample > out_0.out &
+# dev=2
+# injectFD=0
+# template="fd"
+# nohup python emri_pe.py -Tobs $Tobs -M $M -mu $mu -p0 $p0 -e0 $e0 -dev $dev -eps $eps -dt $dt -injectFD $injectFD -template $template -nwalkers $nwalkers -ntemps $ntemps -downsample $downsample > out_0.out &
 
-dev=3
-injectFD=1
-template="fd"
-nohup python emri_pe.py -Tobs $Tobs -M $M -mu $mu -p0 $p0 -e0 $e0 -dev $dev -eps $eps -dt $dt -injectFD $injectFD -template $template -nwalkers $nwalkers -ntemps $ntemps -downsample $downsample > out_1.out &
+# dev=3
+# injectFD=1
+# template="fd"
+# nohup python emri_pe.py -Tobs $Tobs -M $M -mu $mu -p0 $p0 -e0 $e0 -dev $dev -eps $eps -dt $dt -injectFD $injectFD -template $template -nwalkers $nwalkers -ntemps $ntemps -downsample $downsample > out_1.out &
 
-dev=4
+dev=5
 injectFD=0
 template="td"
 nohup python emri_pe.py -Tobs $Tobs -M $M -mu $mu -p0 $p0 -e0 $e0 -dev $dev -eps $eps -dt $dt -injectFD $injectFD -template $template -nwalkers $nwalkers -ntemps $ntemps -downsample $downsample > out_2.out &
