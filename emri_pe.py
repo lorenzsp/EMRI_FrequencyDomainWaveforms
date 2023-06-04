@@ -2,7 +2,8 @@
 # nohup python emri_pe.py -Tobs 2.0 -M 1e6 -mu 10.0 -p0 12.0 -e0 0.35 -dev 7 -eps 1e-3 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 1 > out4.out &
 import argparse
 # test on cpu
-#  python emri_pe.py -Tobs 0.1 -M 1e6 -mu 500.0 -p0 12 -e0 0.35 -dev 5 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 2 -ntemps 1 -downsample 0
+# python emri_pe.py -Tobs 0.1 -M 1e6 -mu 500.0 -p0 12 -e0 0.35 -dev 5 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 2 -ntemps 1 -downsample 1
+
 # python emri_pe.py -Tobs 1.0 -M 1e6 -mu 10.0 -p0 12 -e0 0.35 -dev 5 -eps 1e-3 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 0
 parser = argparse.ArgumentParser(description='MCMC few')
 parser.add_argument('-Tobs','--Tobs', help='Observation Time in years', required=True, type=float)
