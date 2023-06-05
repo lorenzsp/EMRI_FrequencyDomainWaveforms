@@ -63,7 +63,7 @@ class get_fd_waveform_fromFD():
         self.dt = dt
         self.non_zero_mask = non_zero_mask
         if window is None:
-            window = 1.0
+            self.window = np.ones_like(self.positive_frequency_mask)
         else:
             self.window = window
 
@@ -86,7 +86,7 @@ class get_fd_waveform_fromTD():
         self.dt = dt
         self.non_zero_mask = non_zero_mask
         if window is None:
-            window = 1.0
+            self.window = np.ones_like(self.positive_frequency_mask)
         else:
             self.window = window
 

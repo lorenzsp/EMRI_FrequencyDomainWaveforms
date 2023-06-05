@@ -3,6 +3,7 @@
 import argparse
 # test on cpu
 # python emri_pe.py -Tobs 0.1 -M 1e6 -mu 500.0 -p0 12 -e0 0.35 -dev 5 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 2 -ntemps 1 -downsample 1
+# python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 16 -ntemps 1 -downsample 1 -dev 0
 
 # python emri_pe.py -Tobs 1.0 -M 1e6 -mu 10.0 -p0 12 -e0 0.35 -dev 5 -eps 1e-3 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 0
 parser = argparse.ArgumentParser(description='MCMC few')
@@ -165,7 +166,7 @@ def run_emri_pe(
         "emri": ProbDistContainer(
             {
                 0: uniform_dist(np.log(5e5), np.log(1e7)),  # M
-                1: uniform_dist(np.log(1e-6), np.log(1e-2)),  # mass ratio
+                1: uniform_dist(np.log(1e-6), np.log(1e-4)),  # mass ratio
                 2: uniform_dist(10.0, 15.0),  # p0
                 3: uniform_dist(0.001, 0.7),  # e0
                 4: uniform_dist(0.0, 2 * np.pi),  # Phi_phi0
@@ -285,7 +286,7 @@ def run_emri_pe(
             f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]]>=0.0]
         
         positive_frequency_mask = (frequency[lst_ind[0::ii]]>=0.0)
-        window = xp.asarray( hann( len(frequency[lst_ind[0::ii]]) ) )
+        window = None#xp.asarray( hann( len(frequency[lst_ind[0::ii]]) ) )
         like_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)
         fd_inner_product_kwargs_downsamp = dict( PSD=xp.asarray(get_sensitivity(f_arr)), use_gpu=use_gpu, f_arr=f_arr)
         # downsample data stream
@@ -304,7 +305,7 @@ def run_emri_pe(
         parameter_transforms={"emri": transform_fn},
         vectorized=False,
         transpose_params=False,
-        subset= 24,  # may need this subset
+        subset= nwalkers,  # may need this subset
         f_arr = f_arr,
         use_gpu=use_gpu
     )
@@ -319,23 +320,23 @@ def run_emri_pe(
     )
     # else:
 
-    if use_gpu == False and downsample:
-        # log-like for multiprocessing
-        def like(x, **kw):
-            if len(x.shape)==2:
-                out = []
-                for el in x:
-                    inp = transform_fn.both_transforms(el[None, :])[0]
-                    sig_fd = like_gen(*inp, **kw)
-                    ll = [data_stream[0]-sig_fd[0],data_stream[1]-sig_fd[1]]
-                    out.append(-0.5 * inner_product(ll, ll, **fd_inner_product_kwargs_downsamp))
-                out = np.asarray(out)
-            else:
-                inp = transform_fn.both_transforms(x[None, :])[0]
-                sig_fd = like_gen(*inp, **kw)
-                ll = [data_stream[0]-sig_fd[0],data_stream[1]-sig_fd[1]]
-                out = -0.5 * inner_product(ll, ll, **fd_inner_product_kwargs_downsamp)
-            return out
+    # if use_gpu == False and downsample:
+    #     # log-like for multiprocessing
+    #     def like(x, **kw):
+    #         if len(x.shape)==2:
+    #             out = []
+    #             for el in x:
+    #                 inp = transform_fn.both_transforms(el[None, :])[0]
+    #                 sig_fd = like_gen(*inp, **kw)
+    #                 ll = [data_stream[0]-sig_fd[0],data_stream[1]-sig_fd[1]]
+    #                 out.append(-0.5 * inner_product(ll, ll, **fd_inner_product_kwargs_downsamp))
+    #             out = np.asarray(out)
+    #         else:
+    #             inp = transform_fn.both_transforms(x[None, :])[0]
+    #             sig_fd = like_gen(*inp, **kw)
+    #             ll = [data_stream[0]-sig_fd[0],data_stream[1]-sig_fd[1]]
+    #             out = -0.5 * inner_product(ll, ll, **fd_inner_product_kwargs_downsamp)
+    #         return out
 
 
     ndim = 6
@@ -350,7 +351,6 @@ def run_emri_pe(
     start_params[np.isnan(start_like)] = np.random.multivariate_normal(emri_injection_params_in, cov, size=start_params[np.isnan(start_like)].size)
     print("likelihood",start_like)
     print("likelihood injection",like(emri_injection_params_in[:,None].T , **emri_kwargs))
-    breakpoint()
 
     # start state
     start_state = State(
@@ -406,77 +406,78 @@ def run_emri_pe(
         new_coords = last_state.branches_coords.copy()
         coords = new_coords.copy()
         resume = True
+        print('resuming')
     except:
         resume = False
         print('file not found')
 
 
-    if use_gpu:
-        # prepare sampler
-        sampler = EnsembleSampler(
-            nwalkers,
-            [ndim],  # assumes ndim_max
-            like,
-            priors,
-            tempering_kwargs={"ntemps": ntemps, "Tmax": np.inf},
-            moves=moves,
-            kwargs=emri_kwargs,
-            backend=fp,
-            vectorize=True,
-            periodic=periodic,  # TODO: add periodic to proposals
-            #update_fn=None,
-            #update_iterations=-1,
-            stopping_fn=get_time,
-            stopping_iterations=1,
-            branch_names=["emri"],
-            info={"truth":emri_injection_params_in}
+    # if use_gpu:
+    # prepare sampler
+    sampler = EnsembleSampler(
+        nwalkers,
+        [ndim],  # assumes ndim_max
+        like,
+        priors,
+        tempering_kwargs={"ntemps": ntemps, "Tmax": np.inf},
+        moves=moves,
+        kwargs=emri_kwargs,
+        backend=fp,
+        vectorize=True,
+        periodic=periodic,  # TODO: add periodic to proposals
+        #update_fn=None,
+        #update_iterations=-1,
+        stopping_fn=get_time,
+        stopping_iterations=1,
+        branch_names=["emri"],
+        info={"truth":emri_injection_params_in}
 
-        )
+    )
 
-        if resume:
-            log_prior = sampler.compute_log_prior(coords, inds=inds)
-            log_like = sampler.compute_log_like(coords, inds=inds, logp=log_prior)[0]
-            print("initial loglike",log_like)
-            start_state = State(coords, log_like=log_like, log_prior=log_prior, inds=inds)
+    if resume:
+        log_prior = sampler.compute_log_prior(coords, inds=inds)
+        log_like = sampler.compute_log_like(coords, inds=inds, logp=log_prior)[0]
+        print("initial loglike",log_like)
+        start_state = State(coords, log_like=log_like, log_prior=log_prior, inds=inds)
 
-        nsteps = 10000
-        out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
+    nsteps = 20000
+    out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
 
-    else:
+    # else:
 
-        with mp.Pool(8) as pool:
-        # pool = None
+    #     # with mp.Pool(8) as pool:
+    #     pool = None
 
-            # prepare sampler
-            sampler = EnsembleSampler(
-                nwalkers,
-                [ndim],  # assumes ndim_max
-                like,
-                priors,
-                tempering_kwargs={"ntemps": ntemps, "Tmax": np.inf},
-                moves=moves,
-                kwargs=emri_kwargs,
-                backend=fp,
-                vectorize=False,
-                pool=pool,
-                periodic=periodic,  # TODO: add periodic to proposals
-                #update_fn=None,
-                #update_iterations=-1,
-                stopping_fn=get_time,
-                stopping_iterations=1,
-                branch_names=["emri"],
-                info={"truth":emri_injection_params_in}
+    #     # prepare sampler
+    #     sampler = EnsembleSampler(
+    #         nwalkers,
+    #         [ndim],  # assumes ndim_max
+    #         like,
+    #         priors,
+    #         tempering_kwargs={"ntemps": ntemps, "Tmax": np.inf},
+    #         moves=moves,
+    #         kwargs=emri_kwargs,
+    #         backend=fp,
+    #         vectorize=False,
+    #         pool=pool,
+    #         periodic=periodic,  # TODO: add periodic to proposals
+    #         #update_fn=None,
+    #         #update_iterations=-1,
+    #         stopping_fn=get_time,
+    #         stopping_iterations=1,
+    #         branch_names=["emri"],
+    #         info={"truth":emri_injection_params_in}
 
-            )
+    #     )
 
-            if resume:
-                log_prior = sampler.compute_log_prior(coords, inds=inds)
-                log_like = sampler.compute_log_like(coords, inds=inds, logp=log_prior)[0]
-                print("initial loglike",log_like)
-                start_state = State(coords, log_like=log_like, log_prior=log_prior, inds=inds)
+    #     if resume:
+    #         log_prior = sampler.compute_log_prior(coords, inds=inds)
+    #         log_like = sampler.compute_log_like(coords, inds=inds, logp=log_prior)[0]
+    #         print("initial loglike",log_like)
+    #         start_state = State(coords, log_like=log_like, log_prior=log_prior, inds=inds)
 
-            nsteps = 10000
-            out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
+    #     nsteps = 10000
+    #     out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
 
     # get samples
     samples = sampler.get_chain(discard=0, thin=1)["emri"][:, 0].reshape(-1, ndim)
@@ -532,7 +533,7 @@ if __name__ == "__main__":
     print("new p0 ", p0)
 
     
-    fp = f"./test_MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + "_final.h5"
+    fp = f"results/cpu_MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + "_final.h5"
 
     emri_injection_params = np.array([
         M,  
