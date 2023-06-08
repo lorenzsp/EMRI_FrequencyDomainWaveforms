@@ -197,11 +197,13 @@ def run_emri_pe(
 
     # generate FD waveforms
     data_channels_fd = few_gen(*injection_in, **emri_kwargs)
-    tic = time.perf_counter()
-    [few_gen(*injection_in, **emri_kwargs) for _ in range(10)]
-    toc = time.perf_counter()
-    fd_time = toc-tic
-    print('fd time', fd_time/10)
+    
+    # timing
+    # tic = time.perf_counter()
+    # [few_gen(*injection_in, **emri_kwargs) for _ in range(3)]
+    # toc = time.perf_counter()
+    # fd_time = toc-tic
+    # print('fd time', fd_time/3)
     # frequency goes from -1/dt/2 up to 1/dt/2
     frequency = few_gen.waveform_generator.create_waveform.frequency
     positive_frequency_mask = (frequency>=0.0)
@@ -214,11 +216,14 @@ def run_emri_pe(
 
     # generate TD waveform, this will return a list with hp and hc
     data_channels_td = td_gen_list(*injection_in, **emri_kwargs)
-    tic = time.perf_counter()
-    [td_gen(*injection_in, **emri_kwargs) for _ in range(10)]
-    toc = time.perf_counter()
-    fd_time = toc-tic
-    print('td time', fd_time/10)
+    
+    # timing
+    # tic = time.perf_counter()
+    # [td_gen(*injection_in, **emri_kwargs) for _ in range(3)]
+    # toc = time.perf_counter()
+    # fd_time = toc-tic
+    # print('td time', fd_time/3)
+    
     # windowing signals
     window = xp.asarray(hann(len(data_channels_td[0])))
     fft_td_gen = get_fd_waveform_fromTD(td_gen_list, positive_frequency_mask, dt, window=window)
@@ -269,11 +274,13 @@ def run_emri_pe(
             print('Running with downsampling, injecing consistently the FD signal')
         # list the indeces 
         lst_ind = list(range(len(frequency)))
-        upp = 10000
+        upp = 100
+        
         # make sure there is the zero frequency when you jump
         check_vec = xp.asarray([1==xp.sum(frequency[lst_ind[0::ii]]==0.0) for ii in range(2,upp)])
         # find the one that has the zero frequency
         ii = int(xp.arange(2,upp)[check_vec][-1])
+        fp += f'_skip{ii}'
         print('--------------------------')
         print('skip every ',ii, 'th element')
         print('number of frequencies', len(frequency[lst_ind[0::ii]]))
@@ -533,7 +540,7 @@ if __name__ == "__main__":
     print("new p0 ", p0)
 
     
-    fp = f"results/cpu_MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + "_final.h5"
+    fp = f"results/MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + f"_usegpu{str(use_gpu)}.h5"
 
     emri_injection_params = np.array([
         M,  
