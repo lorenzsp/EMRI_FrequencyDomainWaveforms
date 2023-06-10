@@ -3,10 +3,9 @@
 import argparse
 
 # test on cpu
-# python emri_pe.py -Tobs 0.1 -M 1e6 -mu 500.0 -p0 12 -e0 0.35 -dev 5 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 2 -ntemps 1 -downsample 1
 # python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 16 -ntemps 1 -downsample 1 -dev 0
-
 # python emri_pe.py -Tobs 1.0 -M 1e6 -mu 10.0 -p0 12 -e0 0.35 -dev 5 -eps 1e-3 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 0
+
 parser = argparse.ArgumentParser(description="MCMC few")
 parser.add_argument(
     "-Tobs", "--Tobs", help="Observation Time in years", required=True, type=float
@@ -20,9 +19,7 @@ parser.add_argument(
 parser.add_argument("-p0", "--p0", help="Semi-latus Rectum", required=True, type=float)
 parser.add_argument("-e0", "--e0", help="Eccentricity", required=True, type=float)
 parser.add_argument("-dev", "--dev", help="Cuda Device", required=True, type=int)
-parser.add_argument(
-    "-eps", "--eps", help="eps mode selection", required=True, type=float
-)
+parser.add_argument("-eps", "--eps", help="eps mode selection", required=True, type=float)
 parser.add_argument("-dt", "--dt", help="delta t", required=True, type=float)
 parser.add_argument("-injectFD", "--injectFD", required=True, type=int)
 parser.add_argument("-template", "--template", required=True, type=str)
@@ -148,6 +145,7 @@ def run_emri_pe(
     template="fd",
     emri_kwargs={},
     downsample=False,
+    window_flag=True,
 ):
     (
         M,
@@ -250,9 +248,14 @@ def run_emri_pe(
     # print('td time', fd_time/3)
     
     # windowing signals
-    window = None # xp.asarray(hann(len(data_channels_td[0])))
-    fft_td_gen = get_fd_waveform_fromTD(td_gen_list, positive_frequency_mask, dt, window=window)
-    fd_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)
+    if window_flag:
+        window = xp.asarray(hann(len(data_channels_td[0])))
+        fft_td_gen = get_fd_waveform_fromTD(td_gen_list, positive_frequency_mask, dt, window=window)
+        fd_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)
+    else:
+        window = None
+        fft_td_gen = get_fd_waveform_fromTD(td_gen_list, positive_frequency_mask, dt, window=window)
+        fd_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)
 
     # injections
     sig_fd = fd_gen(*injection_in, **emri_kwargs)
@@ -312,6 +315,10 @@ def run_emri_pe(
             raise ValueError("Cannot run downsampling with time domain template")
         else:
             print("Running with downsampling, injecing consistently the FD signal")
+        # downsample the fft of the window
+        if window_flag:
+            raise ValueError("Cannot run downsampling with time domain template")
+
         # list the indeces
         lst_ind = list(range(len(frequency)))
         upp = 100
@@ -346,15 +353,19 @@ def run_emri_pe(
 
         # modify the positive frequencies with the downsamples version
         positive_frequency_mask = (newfreq >= 0.0)
-        # downsample the fft of the window
-        # window = window[0::ii]
         # define the new waveform generator for the likelihood
-        like_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)#, window_in_fd=True)
+        like_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)
         # define the kwargs for the innerproduct
         fd_inner_product_kwargs_downsamp = dict(PSD=xp.asarray(get_sensitivity(f_arr)), use_gpu=use_gpu, f_arr=f_arr)
         
         # make the check of the downsamples data stream
         check_downsampled = like_gen(*injection_in, **emri_kwargs)
+        # timing
+        tic = time.perf_counter()
+        [like_gen(*injection_in, **emri_kwargs) for _ in range(3)]
+        toc = time.perf_counter()
+        fd_time = toc-tic
+        print('fd time', fd_time/3)
         # take the previous datastream and downsample
         data_stream = [el[ind] for el in sig_fd]
         print("Overlap = ",inner_product(data_stream, check_downsampled, **fd_inner_product_kwargs_downsamp, normalize=True))
@@ -409,9 +420,7 @@ def run_emri_pe(
         emri_injection_params_in, cov, size=start_params[np.isnan(start_like)].size
     )
     print("likelihood", start_like)
-    print(
-        "likelihood injection", like(emri_injection_params_in[:, None].T, **emri_kwargs)
-    )
+    print("likelihood injection", like(emri_injection_params_in[:, None].T, **emri_kwargs))
 
     # start state
     start_state = State(
@@ -509,7 +518,7 @@ def run_emri_pe(
 
     else:
         # use multiprocessing only on CPUs
-        with mp.Pool(1) as pool:
+        with mp.Pool(16) as pool:
             # prepare sampler
             sampler = EnsembleSampler(
                 nwalkers,
@@ -574,6 +583,7 @@ if __name__ == "__main__":
     injectFD = args["injectFD"]  # 0 = inject TD
     template = args["template"]  #'fd'
     downsample = bool(args["downsample"])
+    window_flag = False
 
     ntemps = args["ntemps"]
     nwalkers = args["nwalkers"]
@@ -597,7 +607,7 @@ if __name__ == "__main__":
     print("new p0 ", p0)
 
     # name output
-    fp = f"results/MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template" + template + "_final.h5"
+    fp = f"results/MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template{template}_window_flag{window_flag}.h5"
 
     emri_injection_params = np.array([
         M,  
@@ -634,4 +644,5 @@ if __name__ == "__main__":
         template=template,
         downsample=downsample,
         injectFD=injectFD,
+        window_flag=window_flag,
     )
