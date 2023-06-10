@@ -250,13 +250,10 @@ def run_emri_pe(
     # print('td time', fd_time/3)
     
     # windowing signals
-    window = xp.asarray(hann(len(data_channels_td[0])))
-    fft_td_gen = get_fd_waveform_fromTD(
-        td_gen_list, positive_frequency_mask, dt, window=window
-    )
-    fd_gen = get_fd_waveform_fromFD(
-        few_gen_list, positive_frequency_mask, dt, window=window
-    )
+    window = None # xp.asarray(hann(len(data_channels_td[0])))
+    fft_td_gen = get_fd_waveform_fromTD(td_gen_list, positive_frequency_mask, dt, window=window)
+    fd_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)
+
     # injections
     sig_fd = fd_gen(*injection_in, **emri_kwargs)
     sig_td = fft_td_gen(*injection_in, **emri_kwargs)
@@ -318,11 +315,10 @@ def run_emri_pe(
         # list the indeces
         lst_ind = list(range(len(frequency)))
         upp = 100
-        
+
+        # newfreq = xp.hstack((-10.0**xp.linspace(-5,-1,num=1000),0.0,10.0**xp.linspace(-5,-1,num=1000)) )
         # make sure there is the zero frequency when you jump
-        check_vec = xp.asarray(
-            [1 == xp.sum(frequency[lst_ind[0::ii]] == 0.0) for ii in range(2, upp)]
-        )
+        check_vec = xp.asarray([1 == xp.sum(frequency[lst_ind[0::ii]] == 0.0) for ii in range(2, upp)])
         # find the one that has the zero frequency
         ii = int(xp.arange(2,upp)[check_vec][-1])
         fp += f'_skip{ii}'
@@ -331,22 +327,40 @@ def run_emri_pe(
         print('number of frequencies', len(frequency[lst_ind[0::ii]]))
         print('percentage of frequencies', len(frequency[lst_ind[0::ii]])/len(frequency))
         # add f_arr to the kwarguments
-        emri_kwargs["f_arr"] = frequency[lst_ind[0::ii]]
-        if use_gpu:
-            f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]] >= 0.0].get()
-        else:
-            f_arr = frequency[lst_ind[0::ii]][frequency[lst_ind[0::ii]] >= 0.0]
+        newfreq = frequency[lst_ind[0::ii]]
 
-        positive_frequency_mask = frequency[lst_ind[0::ii]] >= 0.0
-        window = None  # xp.asarray( hann( len(frequency[lst_ind[0::ii]]) ) )
-        like_gen = get_fd_waveform_fromFD(
-            few_gen_list, positive_frequency_mask, dt, window=window
-        )
-        fd_inner_product_kwargs_downsamp = dict(
-            PSD=xp.asarray(get_sensitivity(f_arr)), use_gpu=use_gpu, f_arr=f_arr
-        )
-        # downsample data stream
-        data_stream = like_gen(*injection_in, **emri_kwargs)
+        emri_kwargs["f_arr"] = newfreq
+        if use_gpu:
+            # get the index of the positive frequencies
+            f_arr = newfreq[newfreq >= 0.0].get()
+        else:
+            # get the index of the positive frequencies
+            f_arr = newfreq[newfreq >= 0.0]
+        
+        # take full array of frequencies and set it to true
+        all_freq_true = xp.ones_like(lst_ind,dtype=bool)
+        # set to negative the others
+        all_freq_true[lst_ind[0::ii]] *= False
+        all_freq_true = ~all_freq_true
+        ind = all_freq_true[positive_frequency_mask]
+
+        # modify the positive frequencies with the downsamples version
+        positive_frequency_mask = (newfreq >= 0.0)
+        # downsample the fft of the window
+        # window = window[0::ii]
+        # define the new waveform generator for the likelihood
+        like_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)#, window_in_fd=True)
+        # define the kwargs for the innerproduct
+        fd_inner_product_kwargs_downsamp = dict(PSD=xp.asarray(get_sensitivity(f_arr)), use_gpu=use_gpu, f_arr=f_arr)
+        
+        # make the check of the downsamples data stream
+        check_downsampled = like_gen(*injection_in, **emri_kwargs)
+        # take the previous datastream and downsample
+        data_stream = [el[ind] for el in sig_fd]
+        print("Overlap = ",inner_product(data_stream, check_downsampled, **fd_inner_product_kwargs_downsamp, normalize=True))
+        print("SNR = ", snr(data_stream, **fd_inner_product_kwargs_downsamp))
+        print("SNR = ", snr(check_downsampled, **fd_inner_product_kwargs_downsamp))
+        # plt.figure(); plt.loglog(np.abs(data_stream[0]) ** 2);plt.loglog(np.abs(check_downsampled[0]) ** 2, '--');plt.savefig("test_data.pdf")
 
     else:
         if use_gpu:
@@ -375,26 +389,11 @@ def run_emri_pe(
         noise_kwargs=[{}, {}],  # dict(sens_fn="cornish_lisa_psd"),
         add_noise=False,
     )
-    # else:
+    # gpu samples
+    gpusamp = np.load("samples_GPU.npy")
+    print( like(gpusamp[:1,:-1], **emri_kwargs),gpusamp[:1,-1] )
 
-    # if use_gpu == False and downsample:
-    #     # log-like for multiprocessing
-    #     def like(x, **kw):
-    #         if len(x.shape)==2:
-    #             out = []
-    #             for el in x:
-    #                 inp = transform_fn.both_transforms(el[None, :])[0]
-    #                 sig_fd = like_gen(*inp, **kw)
-    #                 ll = [data_stream[0]-sig_fd[0],data_stream[1]-sig_fd[1]]
-    #                 out.append(-0.5 * inner_product(ll, ll, **fd_inner_product_kwargs_downsamp))
-    #             out = np.asarray(out)
-    #         else:
-    #             inp = transform_fn.both_transforms(x[None, :])[0]
-    #             sig_fd = like_gen(*inp, **kw)
-    #             ll = [data_stream[0]-sig_fd[0],data_stream[1]-sig_fd[1]]
-    #             out = -0.5 * inner_product(ll, ll, **fd_inner_product_kwargs_downsamp)
-    #         return out
-
+    # dimensions of the sampling parameter space
     ndim = 6
 
     # generate starting points
@@ -478,38 +477,7 @@ def run_emri_pe(
         print("file not found")
     import pickle
 
-    # if use_gpu:
-    # prepare sampler
-    # sampler = EnsembleSampler(
-    #     nwalkers,
-    #     [ndim],  # assumes ndim_max
-    #     like,
-    #     priors,
-    #     tempering_kwargs={"ntemps": ntemps, "Tmax": np.inf},
-    #     moves=moves,
-    #     kwargs=emri_kwargs,
-    #     backend=fp,
-    #     vectorize=True,
-    #     periodic=periodic,  # TODO: add periodic to proposals
-    #     # update_fn=None,
-    #     # update_iterations=-1,
-    #     stopping_fn=get_time,
-    #     stopping_iterations=1,
-    #     branch_names=["emri"],
-    #     info={"truth": emri_injection_params_in},
-    # )
-
-    # if resume:
-    #     log_prior = sampler.compute_log_prior(coords, inds=inds)
-    #     log_like = sampler.compute_log_like(coords, inds=inds, logp=log_prior)[0]
-    #     print("initial loglike", log_like)
-    #     start_state = State(coords, log_like=log_like, log_prior=log_prior, inds=inds)
-
-    # nsteps = 20000
-    # out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
-
-    # else:
-    with mp.Pool(4) as pool:
+    if use_gpu:
         # prepare sampler
         sampler = EnsembleSampler(
             nwalkers,
@@ -520,9 +488,8 @@ def run_emri_pe(
             moves=moves,
             kwargs=emri_kwargs,
             backend=fp,
-            vectorize=False,
-            pool=pool,
-            periodic=periodic,  # TODO: add periodic to proposals
+            vectorize=True,
+            periodic=periodic,
             # update_fn=None,
             # update_iterations=-1,
             stopping_fn=get_time,
@@ -535,12 +502,45 @@ def run_emri_pe(
             log_prior = sampler.compute_log_prior(coords, inds=inds)
             log_like = sampler.compute_log_like(coords, inds=inds, logp=log_prior)[0]
             print("initial loglike", log_like)
-            start_state = State(
-                coords, log_like=log_like, log_prior=log_prior, inds=inds
+            start_state = State(coords, log_like=log_like, log_prior=log_prior, inds=inds)
+
+        nsteps = 20000
+        out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
+
+    else:
+        # use multiprocessing only on CPUs
+        with mp.Pool(1) as pool:
+            # prepare sampler
+            sampler = EnsembleSampler(
+                nwalkers,
+                [ndim],  # assumes ndim_max
+                like,
+                priors,
+                tempering_kwargs={"ntemps": ntemps, "Tmax": np.inf},
+                moves=moves,
+                kwargs=emri_kwargs,
+                backend=fp,
+                vectorize=False,
+                pool=pool,
+                periodic=periodic,
+                # update_fn=None,
+                # update_iterations=-1,
+                stopping_fn=get_time,
+                stopping_iterations=1,
+                branch_names=["emri"],
+                info={"truth": emri_injection_params_in},
             )
 
-        nsteps = 10000
-        out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
+            if resume:
+                log_prior = sampler.compute_log_prior(coords, inds=inds)
+                log_like = sampler.compute_log_like(coords, inds=inds, logp=log_prior)[0]
+                print("initial loglike", log_like)
+                start_state = State(
+                    coords, log_like=log_like, log_prior=log_prior, inds=inds
+                )
+
+            nsteps = 10000
+            out = sampler.run_mcmc(start_state, nsteps, progress=True, thin_by=1, burn=0)
 
     # get samples
     samples = sampler.get_chain(discard=0, thin=1)["emri"][:, 0].reshape(-1, ndim)
@@ -563,15 +563,15 @@ if __name__ == "__main__":
     phiK = np.pi / 3  # azimuthal viewing angle
     qS = np.pi / 3  # polar sky angle
     phiS = np.pi / 3  # azimuthal viewing angle
-    dist = 1.0  # distance
+    dist = 2.453905425554584 # 1.0  # distance
     Phi_phi0 = np.pi / 3
     Phi_theta0 = 0.0
     Phi_r0 = np.pi / 3
 
-    Tobs = args["Tobs"]  # 1.00
-    dt = args["dt"]  # 1.0 # 4 Hz is the baseline
-    eps = args["eps"]  # 1e-5
-    injectFD = args["injectFD"]  # 0
+    Tobs = args["Tobs"]  # years
+    dt = args["dt"]  # seconds
+    eps = args["eps"]  # threshold mode content
+    injectFD = args["injectFD"]  # 0 = inject TD
     template = args["template"]  #'fd'
     downsample = bool(args["downsample"])
 
@@ -580,6 +580,7 @@ if __name__ == "__main__":
 
     traj = EMRIInspiral(func="SchwarzEccFlux")
 
+    # fix p0 given T
     p0 = get_p_at_t(
         traj,
         Tobs * 0.99,
@@ -595,8 +596,8 @@ if __name__ == "__main__":
     )
     print("new p0 ", p0)
 
-    
-    fp = f"results/final_CPU_MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_template" + template + "_final.h5"
+    # name output
+    fp = f"results/MCMC_emri_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template" + template + "_final.h5"
 
     emri_injection_params = np.array([
         M,  
