@@ -579,7 +579,7 @@ if __name__ == "__main__":
     if window_flag:
         dist = 1
     else:
-        dist = 2.453905425554584 # 1.0  # distance
+        dist = 2.4539054256
     Phi_phi0 = np.pi / 3
     Phi_theta0 = 0.0
     Phi_r0 = np.pi / 3
