@@ -404,7 +404,9 @@ def run_emri_pe(
     )
     # gpu samples
     gpusamp = np.load("samples_GPU.npy")
-    print( like(gpusamp[:1,:-1], **emri_kwargs),gpusamp[:1,-1] )
+    for ii in range(10):
+        print( like(gpusamp[ii,:-1], **emri_kwargs)-gpusamp[ii,-1] )
+    breakpoint()
 
     # dimensions of the sampling parameter space
     ndim = 6
