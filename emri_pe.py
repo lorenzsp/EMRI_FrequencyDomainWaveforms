@@ -318,13 +318,13 @@ def run_emri_pe(
             print("Running with downsampling, injecing consistently the FD signal")
         # downsample the fft of the window
         if window_flag:
-            raise ValueError("Cannot run downsampling with time domain template")
+            raise ValueError("Cannot run downsampling with windowing")
 
         # list the indeces
         lst_ind = list(range(len(frequency)))
-        upp = 100
+        upp = 30
 
-        # newfreq = xp.hstack((-10.0**xp.linspace(-5,-1,num=1000),0.0,10.0**xp.linspace(-5,-1,num=1000)) )
+        
         # make sure there is the zero frequency when you jump
         check_vec = xp.asarray([1 == xp.sum(frequency[lst_ind[0::ii]] == 0.0) for ii in range(2, upp)])
         # find the one that has the zero frequency
@@ -336,6 +336,7 @@ def run_emri_pe(
         print('percentage of frequencies', len(frequency[lst_ind[0::ii]])/len(frequency))
         # add f_arr to the kwarguments
         newfreq = frequency[lst_ind[0::ii]]
+        # newfreq = xp.hstack((-10.0**xp.linspace(-5,-1,num=1000),0.0,10.0**xp.linspace(-5,-1,num=1000)) )
 
         emri_kwargs["f_arr"] = newfreq
         if use_gpu:
@@ -564,6 +565,12 @@ def run_emri_pe(
 if __name__ == "__main__":
 
     window_flag = bool(args["window_flag"])
+    downsample = bool(args["downsample"])
+    Tobs = args["Tobs"]  # years
+    dt = args["dt"]  # seconds
+    eps = args["eps"]  # threshold mode content
+    injectFD = args["injectFD"]  # 0 = inject TD
+    template = args["template"]  #'fd'
 
     # set parameters
     M = args["M"]  # 1e6
@@ -583,14 +590,6 @@ if __name__ == "__main__":
     Phi_phi0 = np.pi / 3
     Phi_theta0 = 0.0
     Phi_r0 = np.pi / 3
-
-    Tobs = args["Tobs"]  # years
-    dt = args["dt"]  # seconds
-    eps = args["eps"]  # threshold mode content
-    injectFD = args["injectFD"]  # 0 = inject TD
-    template = args["template"]  #'fd'
-    downsample = bool(args["downsample"])
-    
 
     ntemps = args["ntemps"]
     nwalkers = args["nwalkers"]
