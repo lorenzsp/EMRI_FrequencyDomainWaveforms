@@ -4,20 +4,25 @@ from scipy.interpolate import CubicSpline
 S_git = np.genfromtxt('./LISA_Alloc_Sh.txt')
 Sh_X = CubicSpline(S_git[:,0], S_git[:,1])
 
-try:
-    import cupy as xp
-    from cupyx.scipy.signal import convolve
-except:
+request_gpu = False
+if request_gpu:
+    try:
+        import cupy as xp
+        from cupyx.scipy.signal import convolve
+    except:
+        from scipy.signal import convolve
+        import numpy as xp
+else:
     from scipy.signal import convolve
     import numpy as xp
 
-# ff = 10**np.linspace(-5.0, 1.0,num=100)
-# plt.figure(); plt.loglog(ff, get_sensitivity(ff)); plt.loglog(ff, Sh_X(ff),'--'); plt.show()
 
 # redefining the LISA sensitivity
 def get_sensitivity(f):
     """
     Sensitivity defined from 
+    ff = 10**np.linspace(-5.0, 1.0,num=100)
+    plt.figure(); plt.loglog(ff, get_sensitivity(ff)); plt.loglog(ff, Sh_X(ff),'--'); plt.show()
     """
 
     return Sh_X(f)

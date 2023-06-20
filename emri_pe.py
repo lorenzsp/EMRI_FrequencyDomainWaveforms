@@ -75,26 +75,23 @@ from few.utils.constants import *
 SEED = 2601996
 np.random.seed(SEED)
 
-try:
-    import cupy as xp
-
-    # set GPU device
-    xp.cuda.runtime.setDevice(args["dev"])
-    gpu_available = True
-    use_gpu = True
-
-except (ImportError, ModuleNotFoundError) as e:
+request_gpu = False
+if request_gpu:
+    try:
+        import cupy as xp
+        # set GPU device
+        xp.cuda.runtime.setDevice(args["dev"])
+        use_gpu = True
+    except (ImportError, ModuleNotFoundError) as e:
+        import numpy as xp
+        use_gpu = False
+else:
     import numpy as xp
-
-    gpu_available = False
     use_gpu = False
 
 import warnings
 
 warnings.filterwarnings("ignore")
-
-if use_gpu and not gpu_available:
-    raise ValueError("Requesting gpu with no GPU available or cupy issue.")
 
 few_gen = GenerateEMRIWaveform(
     "FastSchwarzschildEccentricFlux",
@@ -237,6 +234,8 @@ def run_emri_pe(
     del emri_kwargs["mask_positive"]
     # non zero frequencies
     non_zero_mask = xp.abs(sig_fd[0]) > 1e-50
+    # plt.figure(); plt.semilogy(frequency[positive_frequency_mask][non_zero_mask], label='non-zero'  ); plt.semilogy(frequency[positive_frequency_mask][~non_zero_mask], label='zero'  ); plt.legend(); plt.savefig('freq.pdf')
+    # breakpoint()
 
     # generate TD waveform, this will return a list with hp and hc
     data_channels_td = td_gen_list(*injection_in, **emri_kwargs)
@@ -312,6 +311,8 @@ def run_emri_pe(
         plt.savefig(fp[:-3] + "injection.pdf")
 
     if downsample:
+        # here we will downsample to the frequencies that make the waveform non zero
+
         if template == "td":
             raise ValueError("Cannot run downsampling with time domain template")
         else:
@@ -320,23 +321,14 @@ def run_emri_pe(
         if window_flag:
             raise ValueError("Cannot run downsampling with windowing")
 
-        # list the indeces
-        lst_ind = list(range(len(frequency)))
-        upp = 30
-
-        
-        # make sure there is the zero frequency when you jump
-        check_vec = xp.asarray([1 == xp.sum(frequency[lst_ind[0::ii]] == 0.0) for ii in range(2, upp)])
-        # find the one that has the zero frequency
-        ii = int(xp.arange(2,upp)[check_vec][-1])
-        fp += f'_skip{ii}'
         print('--------------------------')
-        print('skip every ',ii, 'th element')
-        print('number of frequencies', len(frequency[lst_ind[0::ii]]))
-        print('percentage of frequencies', len(frequency[lst_ind[0::ii]])/len(frequency))
+        print('number of frequencies', len(frequency[positive_frequency_mask][non_zero_mask]))
+        print('percentage of frequencies used', len(frequency[positive_frequency_mask][non_zero_mask])/len(frequency[positive_frequency_mask]))
         # add f_arr to the kwarguments
-        newfreq = frequency[lst_ind[0::ii]]
-        # newfreq = xp.hstack((-10.0**xp.linspace(-5,-1,num=1000),0.0,10.0**xp.linspace(-5,-1,num=1000)) )
+        # make sure that there is the zero frequency!
+        newfreq = xp.hstack((-frequency[positive_frequency_mask][non_zero_mask][::-1][:-1],
+                            frequency[positive_frequency_mask][non_zero_mask]
+                            ) )
 
         emri_kwargs["f_arr"] = newfreq
         if use_gpu:
@@ -345,13 +337,6 @@ def run_emri_pe(
         else:
             # get the index of the positive frequencies
             f_arr = newfreq[newfreq >= 0.0]
-        
-        # take full array of frequencies and set it to true
-        all_freq_true = xp.ones_like(lst_ind,dtype=bool)
-        # set to negative the others
-        all_freq_true[lst_ind[0::ii]] *= False
-        all_freq_true = ~all_freq_true
-        ind = all_freq_true[positive_frequency_mask]
 
         # modify the positive frequencies with the downsamples version
         positive_frequency_mask = (newfreq >= 0.0)
@@ -369,7 +354,8 @@ def run_emri_pe(
         fd_time = toc-tic
         print('fd time', fd_time/3)
         # take the previous datastream and downsample
-        data_stream = [el[ind] for el in sig_fd]
+        # data_stream = [el[ind] for el in sig_fd]
+        data_stream = [el[non_zero_mask] for el in sig_fd]
         print("Overlap = ",inner_product(data_stream, check_downsampled, **fd_inner_product_kwargs_downsamp, normalize=True))
         print("SNR = ", snr(data_stream, **fd_inner_product_kwargs_downsamp))
         print("SNR = ", snr(check_downsampled, **fd_inner_product_kwargs_downsamp))
@@ -404,8 +390,8 @@ def run_emri_pe(
     )
     # gpu samples
     gpusamp = np.load("samples_GPU.npy")
-    for ii in range(10):
-        print( like(gpusamp[ii,:-1], **emri_kwargs)-gpusamp[ii,-1] )
+    for ii in range(50):
+        print( 1-like(gpusamp[ii,:-1], **emri_kwargs)/gpusamp[ii,-1] )
     breakpoint()
 
     # dimensions of the sampling parameter space
@@ -615,7 +601,7 @@ if __name__ == "__main__":
     print("new p0 ", p0)
 
     # name output
-    fp = f"results/MCMC_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template{template}_window_flag{window_flag}.h5"
+    fp = f"./MCMC_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template{template}_window_flag{window_flag}.h5"
 
     emri_injection_params = np.array([
         M,  
