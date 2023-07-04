@@ -4,7 +4,7 @@ from scipy.interpolate import CubicSpline
 S_git = np.genfromtxt('./LISA_Alloc_Sh.txt')
 Sh_X = CubicSpline(S_git[:,0], S_git[:,1])
 
-request_gpu = False
+request_gpu = True
 if request_gpu:
     try:
         import cupy as xp
@@ -143,4 +143,89 @@ data = np.random.randn(n_samples, n_dimensions)
 colors = np.log(np.exp(-np.sum(data**2,axis=1)/2 ) )
 label = ['var '+str(i) for i in range(n_dimensions)]
 # get_colorplot(data, colors, label)
+
+# Automated windowing procedure following Sokal (1989)
+def auto_window(taus, c):
+    m = np.arange(len(taus)) < c * taus
+    if np.any(m):
+        return np.argmin(m)
+    return len(taus) - 1
+
+def next_pow_two(n):
+    i = 1
+    while i < n:
+        i = i << 1
+    return i
+
+def autocorr_func_1d(x, norm=True):
+    x = np.atleast_1d(x)
+    if len(x.shape) != 1:
+        raise ValueError("invalid dimensions for 1D autocorrelation function")
+    n = next_pow_two(len(x))
+
+    # Compute the FFT and then (from that) the auto-correlation function
+    f = np.fft.fft(x - np.mean(x), n=2 * n)
+    acf = np.fft.ifft(f * np.conjugate(f))[: len(x)].real
+    acf /= 4 * n
+
+    # Optionally normalize
+    if norm:
+        acf /= acf[0]
+
+    return acf
+
+def autocorr_gw2010(y, c=5.0):
+    f = autocorr_func_1d(np.mean(y, axis=0))
+    taus = 2.0 * np.cumsum(f) - 1.0
+    window = auto_window(taus, c)
+    return taus[window]
+
+def autocorr_new(y, c=5.0):
+    f = np.zeros(y.shape[1])
+    for yy in y:
+        f += autocorr_func_1d(yy)
+    f /= len(y)
+    taus = 2.0 * np.cumsum(f) - 1.0
+    window = auto_window(taus, c)
+    return taus[window]
+
+def as_si(x, ndp):
+    s = '{x:0.{ndp:d}e}'.format(x=x, ndp=ndp)
+    m, e = s.split('e')
+    if m!='1':
+        return r'{m:s}\times 10^{{{e:d}}}'.format(m=m, e=int(e))
+    else:
+        return r'10^{{{e:d}}}'.format(e=int(e))
+
+
+def get_colorplot(data, color_value, label, label_cbar):
+    colors = color_value
+    n_dimensions = data.shape[-1]
+    # Plot the corner plot
+    figure, axes = plt.subplots(n_dimensions-1, n_dimensions-1, figsize=(10, 10))
+
+    # Custom color map
+    cmap = plt.cm.get_cmap('seismic')  # Choose a color map of your preference
+
+    for i in range(n_dimensions-1):
+        for j in range(n_dimensions-1):
+            if j < i:
+                axes[j, i].axis('off')
+            else:
+                axes[j, i].scatter(data[:, i], data[:, j+1], c=colors, cmap=cmap, s=5,alpha=0.6)
+                
+
+    [axes[n_dimensions-2, i].set_xlabel(label[i]) for i in range(n_dimensions-1)]
+    [axes[n_dimensions-2, i].set_yticklabels([]) for i in range(1,n_dimensions-1)]
+    [axes[j, 0].set_ylabel(label[j+1]) for j in range(n_dimensions-1)]
+    [axes[j, 0].set_xticklabels([]) for j in range(n_dimensions-2)]
+
+    # Customize color bar
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=np.min(colors), vmax=np.max(colors)))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=axes.ravel().tolist(), anchor=(0.0,11.0), orientation='horizontal')
+    cbar.set_label(label_cbar, rotation=0, labelpad=15)
+
+    plt.subplots_adjust(hspace=0.4, wspace=0.4)
+    plt.show()
 
