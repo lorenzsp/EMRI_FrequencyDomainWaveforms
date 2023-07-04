@@ -30,6 +30,9 @@ parser.add_argument("-window_flag", "--window_flag", required=True, type=int)
 
 args = vars(parser.parse_args())
 
+def dft(x, f, t):
+    M = np.exp(-2j * np.pi * f[:,None] * t[None,:] )
+    return np.dot(M, x)
 
 import sys
 
@@ -75,7 +78,7 @@ from few.utils.constants import *
 SEED = 2601996
 np.random.seed(SEED)
 
-request_gpu = False
+request_gpu = True
 if request_gpu:
     try:
         import cupy as xp
@@ -220,11 +223,11 @@ def run_emri_pe(
     data_channels_fd = few_gen(*injection_in, **emri_kwargs)
     
     # timing
-    # tic = time.perf_counter()
-    # [few_gen(*injection_in, **emri_kwargs) for _ in range(3)]
-    # toc = time.perf_counter()
-    # fd_time = toc-tic
-    # print('fd time', fd_time/3)
+    tic = time.perf_counter()
+    [few_gen(*injection_in, **emri_kwargs) for _ in range(3)]
+    toc = time.perf_counter()
+    fd_time = toc-tic
+    print('fd time', fd_time/3)
     # frequency goes from -1/dt/2 up to 1/dt/2
     frequency = few_gen.waveform_generator.create_waveform.frequency
     positive_frequency_mask = frequency >= 0.0
@@ -241,11 +244,11 @@ def run_emri_pe(
     data_channels_td = td_gen_list(*injection_in, **emri_kwargs)
     
     # timing
-    # tic = time.perf_counter()
-    # [td_gen(*injection_in, **emri_kwargs) for _ in range(3)]
-    # toc = time.perf_counter()
-    # fd_time = toc-tic
-    # print('td time', fd_time/3)
+    tic = time.perf_counter()
+    [td_gen(*injection_in, **emri_kwargs) for _ in range(3)]
+    toc = time.perf_counter()
+    fd_time = toc-tic
+    print('td time', fd_time/3)
     
     # windowing signals
     if window_flag:
@@ -321,51 +324,72 @@ def run_emri_pe(
         if window_flag:
             raise ValueError("Cannot run downsampling with windowing")
 
-        print('--------------------------')
-        print('number of frequencies', len(frequency[positive_frequency_mask][non_zero_mask]))
-        print('percentage of frequencies used', len(frequency[positive_frequency_mask][non_zero_mask])/len(frequency[positive_frequency_mask]))
-        # add f_arr to the kwarguments
-        # make sure that there is the zero frequency!
-        newfreq = xp.hstack((-frequency[positive_frequency_mask][non_zero_mask][::-1][:-1],
-                            frequency[positive_frequency_mask][non_zero_mask]
+        fixed_freq = frequency[positive_frequency_mask]
+        upp = 100# [1,5,10,50,100]:
+        print('---------------------------')
+        start_f = fixed_freq[non_zero_mask].min()
+        end_f = fixed_freq[non_zero_mask].max()
+        num = int( len(fixed_freq[non_zero_mask]) / upp )
+        p_freq = np.linspace(0.0, end_f*1.01, num=num ) 
+        newfreq = xp.hstack((-p_freq[::-1][:-1],
+                            p_freq
                             ) )
+        print('--------------------------')
+        print('number of frequencies', len(p_freq))
+        print('percentage of frequencies used', len(p_freq)/len(fixed_freq))
 
-        emri_kwargs["f_arr"] = newfreq
+        emri_kwargs_ds = emri_kwargs.copy()
+        emri_kwargs_ds["f_arr"] = newfreq
         if use_gpu:
             # get the index of the positive frequencies
-            f_arr = newfreq[newfreq >= 0.0].get()
+            f_arr_ds = newfreq[newfreq >= 0.0].get()
         else:
             # get the index of the positive frequencies
-            f_arr = newfreq[newfreq >= 0.0]
+            f_arr_ds = newfreq[newfreq >= 0.0]
 
         # modify the positive frequencies with the downsamples version
-        positive_frequency_mask = (newfreq >= 0.0)
         # define the new waveform generator for the likelihood
-        like_gen = get_fd_waveform_fromFD(few_gen_list, positive_frequency_mask, dt, window=window)
+        like_gen_ds = get_fd_waveform_fromFD(few_gen_list, (newfreq >= 0.0), dt, window=window)
         # define the kwargs for the innerproduct
-        fd_inner_product_kwargs_downsamp = dict(PSD=xp.asarray(get_sensitivity(f_arr)), use_gpu=use_gpu, f_arr=f_arr)
+        fd_inner_product_kwargs_downsamp = dict(PSD=xp.asarray(get_sensitivity(f_arr_ds)), use_gpu=use_gpu, f_arr=f_arr_ds)
         
         # make the check of the downsamples data stream
-        check_downsampled = like_gen(*injection_in, **emri_kwargs)
+        check_downsampled = like_gen_ds(*injection_in, **emri_kwargs_ds)
         # timing
         tic = time.perf_counter()
-        [like_gen(*injection_in, **emri_kwargs) for _ in range(3)]
+        [like_gen_ds(*injection_in, **emri_kwargs_ds) for _ in range(3)]
         toc = time.perf_counter()
         fd_time = toc-tic
         print('fd time', fd_time/3)
         # take the previous datastream and downsample
-        # data_stream = [el[ind] for el in sig_fd]
-        data_stream = [el[non_zero_mask] for el in sig_fd]
-        print("Overlap = ",inner_product(data_stream, check_downsampled, **fd_inner_product_kwargs_downsamp, normalize=True))
-        print("SNR = ", snr(data_stream, **fd_inner_product_kwargs_downsamp))
         print("SNR = ", snr(check_downsampled, **fd_inner_product_kwargs_downsamp))
-        # plt.figure(); plt.loglog(np.abs(data_stream[0]) ** 2);plt.loglog(np.abs(check_downsampled[0]) ** 2, '--');plt.savefig("test_data.pdf")
 
+        like_ds = Likelihood(
+            like_gen_ds,
+            nchannels,  # channels (plus,cross)
+            parameter_transforms={"emri": transform_fn},
+            vectorized=False,
+            transpose_params=False,
+            subset=24,  # may need this subset
+            f_arr=f_arr_ds,
+            use_gpu=use_gpu,
+        )
+
+        like_ds.inject_signal(
+            data_stream=check_downsampled,
+            # params= injection_params.copy()[test_inds],
+            waveform_kwargs=emri_kwargs_ds,
+            noise_fn=[get_sensitivity, get_sensitivity],
+            noise_args=[(), ()],
+            noise_kwargs=[{}, {}],  # dict(sens_fn="cornish_lisa_psd"),
+            add_noise=False,
+        )
+
+
+    if use_gpu:
+        f_arr = frequency[positive_frequency_mask].get()
     else:
-        if use_gpu:
-            f_arr = frequency[positive_frequency_mask].get()
-        else:
-            f_arr = frequency[positive_frequency_mask]
+        f_arr = frequency[positive_frequency_mask]
 
     # if use_gpu:
     like = Likelihood(
@@ -391,7 +415,7 @@ def run_emri_pe(
     # gpu samples
     gpusamp = np.load("samples_GPU.npy")
     for ii in range(50):
-        print( 1-like(gpusamp[ii,:-1], **emri_kwargs)/gpusamp[ii,-1] )
+        print( 1-like_ds(gpusamp[ii,:-1], **emri_kwargs_ds)/like(gpusamp[ii,:-1], **emri_kwargs) )
     breakpoint()
 
     # dimensions of the sampling parameter space
