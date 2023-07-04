@@ -1,5 +1,6 @@
 # nohup python emri_pe.py > out.out &
 # nohup python emri_pe.py -Tobs 2.0 -M 1e6 -mu 10.0 -p0 12.0 -e0 0.35 -dev 7 -eps 1e-3 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 1 > out4.out &
+# nohup python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -dev 5 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 2 --window_flag 0 > downsampled2.out &
 import argparse
 
 # test on cpu
@@ -78,7 +79,7 @@ from few.utils.constants import *
 SEED = 2601996
 np.random.seed(SEED)
 
-request_gpu = False
+request_gpu = True
 if request_gpu:
     try:
         import cupy as xp
@@ -229,6 +230,22 @@ def run_emri_pe(
     toc = time.perf_counter()
     fd_time = toc-tic
     print('fd time', fd_time/repeat)
+
+    signal1 = data_channels_fd
+    get_convolution(signal1,signal1)
+    tic = time.perf_counter()
+    get_convolution(signal1,signal1)
+    toc = time.perf_counter()
+    fd_time = toc-tic
+    print('get_convolution time', fd_time/repeat, "length of signal", len(signal1))
+    
+    get_fft_td_windowed(signal1,signal1,dt)
+    tic = time.perf_counter()
+    get_fft_td_windowed(signal1,signal1,dt)
+    toc = time.perf_counter()
+    fd_time = toc-tic
+    print('get_fft_td_windowed time', fd_time/repeat, "length of signal", len(signal1))
+
     # frequency goes from -1/dt/2 up to 1/dt/2
     frequency = few_gen.waveform_generator.create_waveform.frequency
     positive_frequency_mask = frequency >= 0.0
@@ -314,7 +331,7 @@ def run_emri_pe(
         plt.loglog(np.abs(data_stream[0]) ** 2)
         plt.savefig(fp[:-3] + "injection.pdf")
 
-    if downsample:
+    if downsample!=False:
         # here we will downsample to the frequencies that make the waveform non zero
 
         if template == "td":
@@ -326,7 +343,7 @@ def run_emri_pe(
             raise ValueError("Cannot run downsampling with windowing")
 
         fixed_freq = frequency[positive_frequency_mask]
-        upp = 10# [1,5,10,50,100]:
+        upp = downsample# [1,5,10,50,100]:
         print('---------------------------')
         start_f = fixed_freq[non_zero_mask].min()
         end_f = fixed_freq[non_zero_mask].max()
@@ -336,6 +353,7 @@ def run_emri_pe(
                             p_freq
                             ) )
         print('--------------------------')
+        print('downsampling ', downsample)
         print('number of frequencies', len(p_freq))
         print('percentage of frequencies used', len(p_freq)/len(fixed_freq))
 
@@ -418,7 +436,7 @@ def run_emri_pe(
         # gpu samples for the case of 
         # python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -dev 7 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 1 --window_flag 0
         gpusamp = np.load("samples_GPU.npy")
-        for ii in range(50):
+        for ii in range(10):
             tic = time.time()
             dslike = like_ds(gpusamp[ii,:-1], **emri_kwargs_ds)
             toc = time.time()
@@ -428,7 +446,9 @@ def run_emri_pe(
             toc = time.time()
             print("downsampled likelihood",toc-tic)
             print( 1-dslike/stdlike )
-    breakpoint()
+        del like,emri_kwargs
+        like = like_ds
+        emri_kwargs = emri_kwargs_ds
 
     # dimensions of the sampling parameter space
     ndim = 6
@@ -589,7 +609,7 @@ def run_emri_pe(
 if __name__ == "__main__":
 
     window_flag = bool(args["window_flag"])
-    downsample = bool(args["downsample"])
+    downsample = int(args["downsample"])
     Tobs = args["Tobs"]  # years
     dt = args["dt"]  # seconds
     eps = args["eps"]  # threshold mode content
@@ -637,7 +657,7 @@ if __name__ == "__main__":
     print("new p0 ", p0)
 
     # name output
-    fp = f"./MCMC_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template{template}_window_flag{window_flag}.h5"
+    fp = f"results/downsampled_mcmc/MCMC_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template{template}_window_flag{window_flag}.h5"
 
     emri_injection_params = np.array([
         M,  
