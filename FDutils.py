@@ -4,7 +4,7 @@ from scipy.interpolate import CubicSpline
 S_git = np.genfromtxt('./LISA_Alloc_Sh.txt')
 Sh_X = CubicSpline(S_git[:,0], S_git[:,1])
 
-request_gpu = True
+request_gpu = False
 if request_gpu:
     try:
         import cupy as xp

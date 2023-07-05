@@ -31,10 +31,6 @@ parser.add_argument("-window_flag", "--window_flag", required=True, type=int)
 
 args = vars(parser.parse_args())
 
-def dft(x, f, t):
-    M = np.exp(-2j * np.pi * f[:,None] * t[None,:] )
-    return np.dot(M, x)
-
 import sys
 
 sys.path.append("../LISAanalysistools/")
@@ -79,7 +75,7 @@ from few.utils.constants import *
 SEED = 2601996
 np.random.seed(SEED)
 
-request_gpu = True
+request_gpu = False
 if request_gpu:
     try:
         import cupy as xp
