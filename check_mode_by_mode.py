@@ -1,6 +1,5 @@
 import os
 print("PID:",os.getpid())
-# from few.utils.utility import omp_set_num_threads
 
 # os.system("export OMP_NUM_THREADS=4")
 # os.environ["OMP_NUM_THREADS"] = "4"
@@ -40,7 +39,6 @@ traj_module = EMRIInspiral(func="SchwarzEccFlux")
 
 from eryn.utils import TransformContainer
 from few.utils.baseclasses import SchwarzschildEccentric
-from few.utils.utility import omp_set_num_threads
 
 import time
 
@@ -379,9 +377,6 @@ def run_check(
     return
 
 if __name__ == "__main__":
-    
-    # set number of threads
-    omp_set_num_threads(1)
 
     Tobs = args['Tobs'] # 1.05
     dt = args['dt'] #10.0
