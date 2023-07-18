@@ -432,10 +432,12 @@ def run_emri_pe(
         emri_kwargs = emri_kwargs_ds
         
     
+
     tic = time.time()
     [like(gpusamp[ii,:-1], **emri_kwargs) for ii in range(10)]
     toc = time.time()
     print("likelihood speed",(toc-tic)/10)
+    breakpoint()
     # dimensions of the sampling parameter space
     ndim = 6
 
