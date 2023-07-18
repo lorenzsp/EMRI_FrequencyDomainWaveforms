@@ -75,7 +75,7 @@ from few.utils.constants import *
 SEED = 2601996
 np.random.seed(SEED)
 
-request_gpu = False
+request_gpu = True
 if request_gpu:
     try:
         import cupy as xp
@@ -428,24 +428,21 @@ def run_emri_pe(
         add_noise=False,
     )
 
+    
+    # gpu samples for the case of 
+    # python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -dev 7 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 1 --window_flag 0
+    gpusamp = np.load("samples_GPU.npy")
+
     if downsample:
-        # gpu samples for the case of 
-        # python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -dev 7 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 1 --window_flag 0
-        gpusamp = np.load("samples_GPU.npy")
-        for ii in range(10):
-            tic = time.time()
-            dslike = like_ds(gpusamp[ii,:-1], **emri_kwargs_ds)
-            toc = time.time()
-            print("downsampled likelihood",toc-tic)
-            tic = time.time()
-            stdlike = like(gpusamp[ii,:-1], **emri_kwargs)
-            toc = time.time()
-            print("downsampled likelihood",toc-tic)
-            print( 1-dslike/stdlike )
         del like,emri_kwargs
         like = like_ds
         emri_kwargs = emri_kwargs_ds
-
+        
+    
+    tic = time.time()
+    [like(gpusamp[ii,:-1], **emri_kwargs) for ii in range(10)]
+    toc = time.time()
+    print("likelihood speed",(toc-tic)/10)
     # dimensions of the sampling parameter space
     ndim = 6
 
