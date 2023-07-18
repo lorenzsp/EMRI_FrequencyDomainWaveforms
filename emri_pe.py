@@ -3,10 +3,6 @@
 # nohup python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -dev 5 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 2 --window_flag 0 > downsampled2.out &
 import argparse
 
-# test on cpu
-# python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 16 -ntemps 1 -downsample 1 -dev 0 -window_flag 0 
-# python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 16 -ntemps 1 -downsample 0 -dev 0 -window_flag 0 
-
 parser = argparse.ArgumentParser(description="MCMC few")
 parser.add_argument(
     "-Tobs", "--Tobs", help="Observation Time in years", required=True, type=float
@@ -64,9 +60,6 @@ from few.utils.utility import get_p_at_t
 from few.trajectory.inspiral import EMRIInspiral
 
 from eryn.utils import TransformContainer
-from few.utils.utility import omp_set_num_threads
-
-omp_set_num_threads(1)
 
 import time
 import matplotlib.pyplot as plt

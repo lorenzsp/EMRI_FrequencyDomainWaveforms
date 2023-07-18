@@ -1,11 +1,21 @@
 # EMRI_FourierDomainWaveforms
 
-This folder contains the analysis of the Fourier Domain EMRI Waveform implemented in the package Fast EMRI Waveforms ([arxiv.org/2104.04582](https://arxiv.org/abs/2104.04582), [arxiv.org/2008.06071](https://arxiv.org/abs/2008.06071)). To run the scripts constained in this folder it is necessary to install the Fast EMRI Waveforms package and then install the additional packages uding `pip install tqdm corner`.
+This folder contains the analysis of the Fourier Domain EMRI Waveform implemented in the package Fast EMRI Waveforms ([arxiv.org/2104.04582](https://arxiv.org/abs/2104.04582), [arxiv.org/2008.06071](https://arxiv.org/abs/2008.06071)). To run the scripts constained in this folder it is necessary to install the Fast EMRI Waveforms package:
 
 ```
+git clone https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms.git
 cd FastEMRIWaveforms/
 git checkout fd
-python setup.py install
+```
+
+```
+conda create -n fd_env -c conda-forge clangxx_osx-64 clang_osx-64 wget gsl lapack=3.6.1 hdf5 numpy Cython scipy tqdm jupyter ipython h5py requests matplotlib python=3.10
+y
+conda activate fd_env
+pip install tqdm corner
+
+python setup.py install --no_omp
+python -m unittest discover
 ```
 
 
