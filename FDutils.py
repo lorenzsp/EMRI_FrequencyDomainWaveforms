@@ -20,23 +20,62 @@ else:
 # redefining the LISA sensitivity
 def get_sensitivity(f):
     """
-    Sensitivity defined from 
-    ff = 10**np.linspace(-5.0, 1.0,num=100)
-    plt.figure(); plt.loglog(ff, get_sensitivity(ff)); plt.loglog(ff, Sh_X(ff),'--'); plt.show()
+    Calculate the LISA Sensitivity curve as defined in https://arxiv.org/abs/2108.01167.
+    
+    arguments:
+        f (double scalar or 1D np.ndarray): Frequency array in Hz
+
+    returns:
+        1D array or scalar: S(f) with dimensions of seconds.
+
     """
 
     return Sh_X(f)
 
 def get_convolution(a,b):
-    # convolve two signals
+    """
+    Calculate the convolution of two arrays.
+    
+    arguments:
+        a (1D np.ndarray): array to convolve
+        b (1D np.ndarray): array to convolve
+
+    returns:
+        1D array: convolution of the two arrays.
+
+    """
     return convolve(xp.hstack((a[1:], a)), b, mode='valid')/len(b)
 
 def get_fft_td_windowed(signal, window, dt):
+    """
+    Calculate the Fast Fourier Transform of a windowed time domain signal.
+    
+    arguments:
+        signal (list): two dimensional list containig the signals plus and cross polarizations.
+        window (1D np.ndarray): array to be applied in time domain to each signal.
+        dt (double scalar): time sampling interval of the signal and window.
+
+    returns:
+        list: Fast Fourier Transform of the windowed time domain signals.
+
+    """
     fft_td_wave_p = xp.fft.fftshift(xp.fft.fft(signal[0] * window )) * dt
     fft_td_wave_c = xp.fft.fftshift(xp.fft.fft(signal[1] * window )) * dt
     return [fft_td_wave_p,fft_td_wave_c]
 
 def get_fd_windowed(signal, window, window_in_fd=False):
+    """
+    Calculate the convolution of a frequency domain signal with a window in time domain.
+    
+    arguments:
+        signal (list): two dimensional list containig the signals plus and cross polarizations in frequency domain.
+        window (1D np.ndarray): array of the time domain window.
+        window_in_fd (1D np.ndarray): array of the frequency domain window.
+
+    returns:
+        list: convolution of a frequency domain signal with a time domain window.
+
+    """
     if window is None:
         transf_fd_0 = signal[0]
         transf_fd_1 = signal[1]
@@ -64,6 +103,23 @@ def get_fd_windowed(signal, window, window_in_fd=False):
 
 
 class get_fd_waveform_fromFD():
+    """Generic frequency domain class
+
+    This class allows to obtain the frequency domain signal given the frequency domain waveform class
+    from the FEW package.
+
+    Args:
+        waveform_generator (obj): FEW waveform class.
+        positive_frequency_mask (1D np.ndarray): boolean array to indicate where the frequencies are positive.
+        dt (double scalar): time sampling interval of the signal and window.
+        non_zero_mask (1D np.ndarray): boolean array to indicate where the waveform needs to be set to zero.
+        window (1D np.ndarray): array of the time domain window.
+        window_in_fd (1D np.ndarray): array of the frequency domain window.
+
+    returns:
+        list: list of frequency domain signals only over the positive frequencies.
+
+    """
 
     def __init__(self, waveform_generator, positive_frequency_mask, dt, non_zero_mask=None, window=None, window_in_fd=False):
         self.waveform_generator = waveform_generator
@@ -84,7 +140,23 @@ class get_fd_waveform_fromFD():
 
 # conversion
 class get_fd_waveform_fromTD():
+    """Generic time domain class
 
+    This class allows to obtain the frequency domain signal given the time domain waveform class
+    from the FEW package.
+
+    Args:
+        waveform_generator (obj): FEW waveform class.
+        positive_frequency_mask (1D np.ndarray): boolean array to indicate where the frequencies are positive.
+        dt (double scalar): time sampling interval of the signal and window.
+        non_zero_mask (1D np.ndarray): boolean array to indicate where the waveform needs to be set to zero.
+        window (1D np.ndarray): array of the time domain window.
+        window_in_fd (1D np.ndarray): array of the frequency domain window.
+
+    returns:
+        list: list of frequency domain signals only over the positive frequencies.
+
+    """
     def __init__(self, waveform_generator, positive_frequency_mask, dt, non_zero_mask=None, window=None):
         self.waveform_generator = waveform_generator
         self.positive_frequency_mask = positive_frequency_mask
