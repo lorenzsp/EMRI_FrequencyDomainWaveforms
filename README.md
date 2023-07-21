@@ -1,6 +1,6 @@
 # EMRI Frequency Domain Waveforms
 
-This folder contains the scripts to reproduce the Frequency Domain EMRI Waveform analysis presented in [arxiv-number-in-prep](). In `Tutorial_FrequencyDomain_Waveforms.ipynb` you can find how to generate Frequency Domain waveforms and compare them to the time domain ones as in the following figure
+This folder contains the scripts to reproduce the Frequency Domain EMRI Waveform analysis presented in [arxiv-number-in-prep](). In `Tutorial_FrequencyDomain_Waveforms.ipynb` you can find how to generate the Frequency Domain (FD) waveforms and compare them to the Time Domain (TD) ones as in the following figure:
 
 ![time domain VS frequency domain](https://github.com/lorenzsp/EMRI_FourierDomainWaveforms/blob/main/figures/FD_TD_frequency.png)
 
