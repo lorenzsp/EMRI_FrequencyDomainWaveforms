@@ -1,37 +1,27 @@
-# nohup python emri_pe.py > out.out &
+# python emri_pe.py -Tobs 2.0 -M 1e6 -mu 10.0 -p0 12.0 -e0 0.35 -dev 7 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 16 -ntemps 1 -downsample 100
 # nohup python emri_pe.py -Tobs 2.0 -M 1e6 -mu 10.0 -p0 12.0 -e0 0.35 -dev 7 -eps 1e-3 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 1 > out4.out &
 # nohup python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -dev 5 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 32 -ntemps 2 -downsample 2 --window_flag 0 > downsampled2.out &
 import argparse
 
-parser = argparse.ArgumentParser(description="MCMC few")
-parser.add_argument(
-    "-Tobs", "--Tobs", help="Observation Time in years", required=True, type=float
-)
-parser.add_argument(
-    "-M", "--M", help="MBH Mass in solar masses", required=True, type=float
-)
-parser.add_argument(
-    "-mu", "--mu", help="Compact Object Mass in solar masses", required=True, type=float
-)
+parser = argparse.ArgumentParser(description="MCMC of EMRI source")
+parser.add_argument("-Tobs", "--Tobs", help="Observation Time in years", required=True, type=float)
+parser.add_argument("-M", "--M", help="MBH Mass in solar masses", required=True, type=float)
+parser.add_argument("-mu", "--mu", help="Compact Object Mass in solar masses", required=True, type=float)
 parser.add_argument("-p0", "--p0", help="Semi-latus Rectum", required=True, type=float)
 parser.add_argument("-e0", "--e0", help="Eccentricity", required=True, type=float)
-parser.add_argument("-dev", "--dev", help="Cuda Device", required=True, type=int)
-parser.add_argument("-eps", "--eps", help="eps mode selection", required=True, type=float)
-parser.add_argument("-dt", "--dt", help="delta t", required=True, type=float)
-parser.add_argument("-injectFD", "--injectFD", required=True, type=int)
-parser.add_argument("-template", "--template", required=True, type=str)
-parser.add_argument("-downsample", "--downsample", required=True, type=int)
+parser.add_argument("-dev", "--dev", help="Cuda Device", required=False, type=int, default=0)
+parser.add_argument("-eps", "--eps", help="eps mode selection", required=False, type=float, default=1e-2)
+parser.add_argument("-dt", "--dt", help="sampling interval delta t", required=False, type=float, default=10.0)
+parser.add_argument("-injectFD", "--injectFD", help="inject a FD if 1", required=True, type=int)
+parser.add_argument("-template", "--template", help="template to be used: fd or td", required=True, type=str)
+parser.add_argument("-downsample", "--downsample", help="downsampling factor", required=True, type=int)
 parser.add_argument("-nwalkers", "--nwalkers", required=True, type=int)
 parser.add_argument("-ntemps", "--ntemps", required=True, type=int)
-parser.add_argument("-window_flag", "--window_flag", required=True, type=int)
+parser.add_argument("-window_flag", "--window_flag", help="windowing options: 0 or 1", required=False, type=int, default=0)
 
 args = vars(parser.parse_args())
 
 import sys
-
-sys.path.append("../LISAanalysistools/")
-sys.path.append("../Eryn/")
-
 import numpy as np
 from eryn.state import State
 from eryn.ensemble import EnsembleSampler
@@ -378,7 +368,6 @@ def run_emri_pe(
             parameter_transforms={"emri": transform_fn},
             vectorized=False,
             transpose_params=False,
-            subset=24,  # may need this subset
             f_arr=f_arr_ds,
             use_gpu=use_gpu,
         )
@@ -393,7 +382,6 @@ def run_emri_pe(
             add_noise=False,
         )
 
-
     if use_gpu:
         f_arr = frequency[positive_frequency_mask].get()
     else:
@@ -406,7 +394,7 @@ def run_emri_pe(
         parameter_transforms={"emri": transform_fn},
         vectorized=False,
         transpose_params=False,
-        subset=24,  # may need this subset
+        subset=24,  # may need changed depending on the gpu
         f_arr=f_arr,
         use_gpu=use_gpu,
     )
@@ -431,13 +419,12 @@ def run_emri_pe(
         like = like_ds
         emri_kwargs = emri_kwargs_ds
         
-    
 
     tic = time.time()
     [like(gpusamp[ii,:-1], **emri_kwargs) for ii in range(10)]
     toc = time.time()
     print("likelihood speed",(toc-tic)/10)
-    breakpoint()
+
     # dimensions of the sampling parameter space
     ndim = 6
 
@@ -480,9 +467,8 @@ def run_emri_pe(
         ("emri", np.asarray([indx_list[ii]])) for ii in range(len(indx_list))
     ]
 
-    # define move
+    # define move, gibbs sampling can be used, currently not
     moves = [
-        # GaussianMove({"emri": cov}, factor=1000, gibbs_sampling_setup=gibbs_sampling)
         StretchMove(
             use_gpu=use_gpu, live_dangerously=True
         )  # , gibbs_sampling_setup=gibbs_sampling)
@@ -495,10 +481,8 @@ def run_emri_pe(
         if i % 50 == 0:
             print("acceptance ratio", samp.acceptance_fraction)
             print("max last loglike", np.max(samp.get_log_like()[-1]))
-            # if (i>100)and(i<1000):
-            #     emrisamp = samp.get_chain()['emri'][-100:,0][samp.get_inds()['emri'][-100:,0]]
-            #     samp.moves[0].all_proposal['emri'].scale = np.cov(emrisamp,rowvar=False)
 
+        # a wall time can be set by uncommenting the following lines
         # if time.time()-start > 23.0*3600:
         #     return True
         # else:
@@ -520,7 +504,8 @@ def run_emri_pe(
         print("file not found")
     import pickle
 
-    nsteps = 500_000
+    # number of MCMC steps
+    nsteps = 10_000
 
     if use_gpu:
         # prepare sampler
@@ -553,7 +538,7 @@ def run_emri_pe(
 
     else:
         # use multiprocessing only on CPUs
-        with mp.Pool(16) as pool:
+        with mp.Pool(4) as pool:
             # prepare sampler
             sampler = EnsembleSampler(
                 nwalkers,
@@ -615,10 +600,12 @@ if __name__ == "__main__":
     phiK = np.pi / 3  # azimuthal viewing angle
     qS = np.pi / 3  # polar sky angle
     phiS = np.pi / 3  # azimuthal viewing angle
-    if window_flag:
-        dist = 1
-    else:
-        dist = 2.4539054256
+    # the next lines normalize the distance to the SNR for the source analyze in the paper
+    # if window_flag:
+    #     dist = 1
+    # else:
+    #     dist = 2.4539054256
+    dist = 2.4539054256
     Phi_phi0 = np.pi / 3
     Phi_theta0 = 0.0
     Phi_r0 = np.pi / 3
@@ -645,7 +632,7 @@ if __name__ == "__main__":
     print("new p0 ", p0)
 
     # name output
-    fp = f"results/downsampled_mcmc/MCMC_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template{template}_window_flag{window_flag}.h5"
+    fp = f"./MCMC_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template{template}_window_flag{window_flag}.h5"
 
     emri_injection_params = np.array([
         M,  
