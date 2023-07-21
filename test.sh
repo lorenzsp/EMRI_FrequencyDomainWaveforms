@@ -1,0 +1,6 @@
+python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -dev 0 -eps 1e-2 -dt 10.0 -injectFD 0 -template td -nwalkers 16 -ntemps 1 -downsample 0 -window_flag 1 -nsteps 1
+python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -dev 0 -eps 1e-2 -dt 10.0 -injectFD 1 -template td -nwalkers 16 -ntemps 1 -downsample 0 -window_flag 1 -nsteps 1
+python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -dev 0 -eps 1e-2 -dt 10.0 -injectFD 0 -template fd -nwalkers 16 -ntemps 1 -downsample 0 -window_flag 1 -nsteps 1
+python emri_pe.py -Tobs 4.0 -M 3670041.7362535275 -mu 292.0583167470244 -p0 13.709101864726545 -e0 0.5794130830706371 -dev 0 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 16 -ntemps 1 -downsample 2 -window_flag 0 -nsteps 1
+python emri_pe.py -Tobs 2.0 -M 1e6 -mu 10.0 -p0 12.0 -e0 0.35 -dev 7 -eps 1e-2 -dt 10.0 -injectFD 1 -template fd -nwalkers 16 -ntemps 1 -downsample 100 -nsteps 1
+python check_mode_by_mode.py -Tobs 1.0 -dev 5 -eps 1e-2 -dt 10.0 -fixed_insp 1
