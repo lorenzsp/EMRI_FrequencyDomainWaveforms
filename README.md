@@ -2,7 +2,7 @@
 
 This folder contains the scripts to reproduce the Frequency Domain EMRI Waveform analysis presented in [arxiv-number-in-prep](). In `Tutorial_FrequencyDomain_Waveforms.ipynb` you can find how to generate Frequency Domain waveforms and compare them to the time domain ones as in the following figure
 
-![time domain VS frequency domain](https://github.com/lorenzsp/EMRI_FourierDomainWaveforms/blob/main/figures/FD_TD_frequency.pdf)
+![time domain VS frequency domain](https://github.com/lorenzsp/EMRI_FourierDomainWaveforms/blob/main/figures/FD_TD_frequency.pdf?raw=true)
 
 The Frequency Domain implementation is now part of the package Fast EMRI Waveforms ([arxiv.org/2104.04582](https://arxiv.org/abs/2104.04582), [arxiv.org/2008.06071](https://arxiv.org/abs/2008.06071)). To run the scripts contained in this folder it is necessary to install the Fast EMRI Waveforms package available [here](https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms/) with the following installation setup: `bash install.sh env_name=fd_env install_type=sampling`.
 
