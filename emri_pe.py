@@ -15,8 +15,9 @@ parser.add_argument("-dt", "--dt", help="sampling interval delta t", required=Fa
 parser.add_argument("-injectFD", "--injectFD", help="inject a FD if 1", required=True, type=int)
 parser.add_argument("-template", "--template", help="template to be used: fd or td", required=True, type=str)
 parser.add_argument("-downsample", "--downsample", help="downsampling factor", required=True, type=int)
-parser.add_argument("-nwalkers", "--nwalkers", required=True, type=int)
-parser.add_argument("-ntemps", "--ntemps", required=True, type=int)
+parser.add_argument("-nwalkers", "--nwalkers", help="number of MCMC walkers", required=True, type=int)
+parser.add_argument("-ntemps", "--ntemps", help="number of MCMC temperatures", required=True, type=int)
+parser.add_argument("-nsteps", "--nsteps", help="number of MCMC iterations", required=False, type=int, default=1000)
 parser.add_argument("-window_flag", "--window_flag", help="windowing options: 0 or 1", required=False, type=int, default=0)
 
 args = vars(parser.parse_args())
@@ -127,6 +128,8 @@ def run_emri_pe(
     emri_kwargs={},
     downsample=False,
     window_flag=True,
+    # number of MCMC steps
+    nsteps = 10_000,
 ):
     (
         M,
@@ -504,9 +507,6 @@ def run_emri_pe(
         print("file not found")
     import pickle
 
-    # number of MCMC steps
-    nsteps = 10_000
-
     if use_gpu:
         # prepare sampler
         sampler = EnsembleSampler(
@@ -629,7 +629,7 @@ if __name__ == "__main__":
         rtol=8.881784197001252e-16,
         bounds=None,
     )
-    print("new p0 ", p0)
+    print("new p0 fixed by Tobs", p0)
 
     # name output
     fp = f"./MCMC_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template{template}_window_flag{window_flag}.h5"
@@ -670,4 +670,5 @@ if __name__ == "__main__":
         downsample=downsample,
         injectFD=injectFD,
         window_flag=window_flag,
+        nsteps=args["nsteps"],
     )
