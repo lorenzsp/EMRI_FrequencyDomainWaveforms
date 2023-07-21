@@ -22,3 +22,9 @@ The analysis presented in [arxiv-number-in-prep]() can be reproduced using the s
 
 * **Lorenzo Speri**
 * Michael Katz
+* Alvin J. K. Chua
+* Scott A. Hughes
+* Niels Warburton
+* Jonathan E. Thompson
+* Christian E. A. Chapman-Bird
+* Jonathan R. Gair
