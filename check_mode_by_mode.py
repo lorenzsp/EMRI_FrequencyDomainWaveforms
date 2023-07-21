@@ -1,23 +1,20 @@
+# Author: Lorenzo Speri
+# example usage:
+# python check_mode_by_mode.py -Tobs 1.0 -dev 5 -eps 1e-2 -dt 10.0 -fixed_insp 1 -nsteps 10
 import os
 print("PID:",os.getpid())
-
-# os.system("export OMP_NUM_THREADS=4")
-# os.environ["OMP_NUM_THREADS"] = "4"
-
 import argparse
-# python check_mode_by_mode.py -Tobs 1.0 -dev 5 -eps 1e-3 -dt 10.0 -fixed_insp 1
 parser = argparse.ArgumentParser(description='MCMC few')
 parser.add_argument('-Tobs','--Tobs', help='Observation Time in years', required=True, type=float)
 parser.add_argument('-dev','--dev', help='Cuda Device', required=True, type=int)
 parser.add_argument('-eps','--eps', help='eps mode selection', required=True, type=float)
 parser.add_argument('-dt','--dt', help='delta t', required=False, type=float, default=10.0)
 parser.add_argument('-fixed_insp','--fixed_insp', help='fix mu to get inspiral Tobs', required=False, type=int, default=1)
+parser.add_argument("-nsteps", "--nsteps", help="number of draws from the EMRI parameter space", required=False, type=int, default=1)
 
 args = vars(parser.parse_args())
 
 import sys
-sys.path.append("../LISAanalysistools/")
-sys.path.append("../Eryn/")
 
 import numpy as np
 from eryn.state import State
@@ -378,17 +375,17 @@ def run_check(
 
 if __name__ == "__main__":
 
-    Tobs = args['Tobs'] # 1.05
-    dt = args['dt'] #10.0
-    eps = args['eps'] #1e-5
+    Tobs = args['Tobs']
+    dt = args['dt']
+    eps = args['eps']
 
     waveform_kwargs = {
         "T": Tobs,
         "dt": dt,
         "eps": eps,
     }
-    tot_numb = 10000
-    fp = f"results/emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}_final"
+    tot_numb = args['nsteps']
+    fp = f"./emri_T{Tobs}_seed{SEED}_dt{dt}_eps{eps}_fixedInsp{args['fixed_insp']}_tot_numb{tot_numb}_final"
 
     run_check(
         Tobs,
