@@ -386,7 +386,6 @@ def run_emri_pe(
             # params= injection_params.copy()[test_inds],
             waveform_kwargs=emri_kwargs_ds,
             noise_fn=[get_sensitivity, get_sensitivity],
-            noise_args=[(), ()],
             noise_kwargs=[{}, {}],  # dict(sens_fn="cornish_lisa_psd"),
             add_noise=False,
         )
@@ -413,7 +412,6 @@ def run_emri_pe(
         # params= injection_params.copy()[test_inds],
         waveform_kwargs=emri_kwargs,
         noise_fn=[get_sensitivity, get_sensitivity],
-        noise_args=[(), ()],
         noise_kwargs=[{}, {}],  # dict(sens_fn="cornish_lisa_psd"),
         add_noise=False,
     )
@@ -429,10 +427,10 @@ def run_emri_pe(
         emri_kwargs = emri_kwargs_ds
         
 
-    tic = time.time()
-    [like(gpusamp[ii,:-1], **emri_kwargs) for ii in range(10)]
-    toc = time.time()
-    print("likelihood speed",(toc-tic)/10)
+    # tic = time.time()
+    # [like(gpusamp[ii,:], **emri_kwargs) for ii in range(10)]
+    # toc = time.time()
+    # print("likelihood speed",(toc-tic)/10)
 
     # dimensions of the sampling parameter space
     ndim = 6
@@ -638,7 +636,7 @@ if __name__ == "__main__":
     print("new p0 fixed by Tobs", p0)
 
     # name output
-    fp = f"./MCMC_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template{template}_window_flag{window_flag}.h5"
+    fp = f"./test_MCMC_M{M:.2}_mu{mu:.2}_p{p0:.2}_e{e0:.2}_T{Tobs}_eps{eps}_seed{SEED}_nw{nwalkers}_nt{ntemps}_downsample{int(downsample)}_injectFD{injectFD}_usegpu{str(use_gpu)}_template{template}_window_flag{window_flag}.h5"
 
     emri_injection_params = np.array([
         M,  
