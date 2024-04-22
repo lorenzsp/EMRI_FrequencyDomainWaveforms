@@ -4,7 +4,7 @@ This folder contains the scripts to reproduce the Frequency Domain EMRI Waveform
 
 ![time domain VS frequency domain](https://github.com/lorenzsp/EMRI_FourierDomainWaveforms/blob/main/figures/FD_TD_frequency.png)
 
-The Frequency Domain implementation is now part of the package Fast EMRI Waveforms ([arxiv.org/2104.04582](https://arxiv.org/abs/2104.04582), [arxiv.org/2008.06071](https://arxiv.org/abs/2008.06071)). To run the scripts contained in this folder it is necessary to install the Fast EMRI Waveforms package available [here](https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms/). You also need to install the codes in: `LISAanalysistools` and `Eryn`.
+The Frequency Domain implementation is now part of the package Fast EMRI Waveforms ([arxiv.org/2104.04582](https://arxiv.org/abs/2104.04582), [arxiv.org/2008.06071](https://arxiv.org/abs/2008.06071)). To run the scripts contained in this folder it is necessary to install the Fast EMRI Waveforms package available [here](https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms/). You also need to install the codes in: `LISAanalysistools` and `Eryn` by running `python setup.py install` inside each folder. 
 
 The analysis presented in [Fast and Fourier: Extreme Mass Ratio Inspiral Waveforms in the Frequency Domain](https://arxiv.org/abs/2307.12585) can be reproduced using the scripts:
 - emri_pe.py: runs an MCMC analysis of an EMRI source. Usage: 
